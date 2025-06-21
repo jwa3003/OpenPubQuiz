@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const quizRoutes = require('./routes/quiz');
+const questionRoutes = require('./routes/question');
+const answerRoutes = require('./routes/answer');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -13,6 +15,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/quiz', quizRoutes);
+app.use('/api/question', questionRoutes);
+app.use('/api/answer', answerRoutes);
 
 // Root
 app.get('/', (req, res) => {
