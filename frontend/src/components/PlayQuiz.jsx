@@ -1,43 +1,76 @@
 import socket from '../socket';
 import { useEffect, useState } from 'react';
 
-function PlayQuiz({ quiz, onBack }) {
+function PlayQuiz({ quizId, onBack }) {
+  const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
-  const [answersMap, setAnswersMap] = useState({}); // questionId -> [answers]
+  const [answersMap, setAnswersMap] = useState({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showResults, setShowResults] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [quizStarted, setQuizStarted] = useState(false);
 
   useEffect(() => {
-    socket.emit('joinRoom', `quiz-${quiz.id}`);
+    if (!quizId) return;
+
+    socket.emit('joinRoom', { quizId, role: 'player' });
 
     socket.on('timerStarted', () => {
       alert('⏱ Timer started!');
-      // Later: start actual timer here
     });
 
     socket.on('nextQuestion', () => {
       setCurrentIndex((prev) => prev + 1);
     });
 
-    fetch(`http://localhost:3001/api/question/quiz/${quiz.id}`)
+    socket.on('startQuiz', () => {
+      setQuizStarted(true);
+      fetchQuestionsAndAnswers();
+    });
+
+    fetch(`http://localhost:3001/api/quiz/${quizId}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Quiz not found');
+        }
+        return res.json();
+      })
+      .then((quizData) => {
+        setQuiz(quizData);
+        setLoading(false);
+      })
+      .catch(() => {
+        setQuiz(null);
+        setLoading(false);
+      });
+
+    return () => {
+      socket.off('timerStarted');
+      socket.off('nextQuestion');
+      socket.off('startQuiz');
+    };
+  }, [quizId]);
+
+  const fetchQuestionsAndAnswers = () => {
+    fetch(`http://localhost:3001/api/questions/${quizId}`)
       .then((res) => res.json())
       .then((qList) => {
         setQuestions(qList);
         qList.forEach((q) => {
-          fetch(`http://localhost:3001/api/answer/question/${q.id}`)
+          fetch(`http://localhost:3001/api/answers/${q.id}`)
             .then((res) => res.json())
             .then((aList) => {
               setAnswersMap((prev) => ({ ...prev, [q.id]: aList }));
             });
         });
       });
-  }, [quiz.id]);
+  };
 
   const handleAnswer = (questionId, answerId) => {
     socket.emit('submitAnswer', {
-      room: `quiz-${quiz.id}`,
-      questionId: currentQuestion.id,
+      room: `quiz-${quizId}`,
+      questionId,
       answerId,
       playerId: socket.id,
     });
@@ -50,9 +83,20 @@ function PlayQuiz({ quiz, onBack }) {
     setShowResults(true);
   };
 
+  if (loading) return <p>Loading quiz info...</p>;
+  if (!quiz) return <p>Quiz not found.</p>;
+
+  if (!quizStarted) {
+    return (
+      <div>
+        <h2>{quiz.name}</h2>
+        <p>⏳ Waiting for the host to start the quiz...</p>
+      </div>
+    );
+  }
+
   const currentQuestion = questions[currentIndex];
   const currentAnswers = currentQuestion ? (answersMap[currentQuestion.id] || []) : [];
-
 
   if (showResults) {
     let correctCount = 0;
@@ -67,23 +111,18 @@ function PlayQuiz({ quiz, onBack }) {
           return (
             <div key={q.id} style={{ marginBottom: '1rem' }}>
               <strong>{q.text}</strong>
-              <p>
-                ✅ Correct answer: <b>{correctAnswer?.text}</b>
-              </p>
-              <p
-                style={{
-                  color: isCorrect ? 'green' : 'red',
-                  fontWeight: 'bold',
-                }}
-              >
-                You answered: {answersMap[q.id]?.find((a) => a.id === selected)?.text || '—'} (
-                {isCorrect ? 'Correct' : 'Incorrect'})
+              <p>✅ Correct answer: <b>{correctAnswer?.text}</b></p>
+              <p style={{
+                color: isCorrect ? 'green' : 'red',
+                fontWeight: 'bold',
+              }}>
+                You answered: {answersMap[q.id]?.find((a) => a.id === selected)?.text || '—'} ({isCorrect ? 'Correct' : 'Incorrect'})
               </p>
             </div>
           );
         })}
         <h3>Your Score: {correctCount} / {questions.length}</h3>
-        <button onClick={onBack}>🔙 Back to Quiz List</button>
+        <button onClick={onBack}>🔙 Back</button>
       </div>
     );
   }

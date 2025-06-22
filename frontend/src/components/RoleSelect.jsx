@@ -1,13 +1,39 @@
 import { useState } from 'react';
+import socket from '../socket';
 
 function RoleSelect({ onSelectRole }) {
   const [role, setRole] = useState(null);
   const [playerName, setPlayerName] = useState('');
   const [quizId, setQuizId] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleJoin = () => {
-    if (!playerName || !quizId) return;
-    onSelectRole('player', { playerName, quizId });
+    if (!playerName || !quizId) {
+      setErrorMessage('Please enter both name and quiz ID.');
+      return;
+    }
+
+    // Check if the quiz exists before joining
+    fetch(`http://localhost:3001/api/quiz/${quizId}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Quiz not found');
+        }
+        return res.json();
+      })
+      .then(() => {
+        // Proceed to join as player
+        onSelectRole('player', { playerName, quizId });
+
+        socket.emit('joinRoom', {
+          quizId,
+          playerName,
+          role: 'player',
+        });
+      })
+      .catch((err) => {
+        setErrorMessage('❌ Quiz ID not found. Please check and try again.');
+      });
   };
 
   const handleHost = () => {
@@ -18,12 +44,13 @@ function RoleSelect({ onSelectRole }) {
   return (
     <div style={{ padding: '2rem' }}>
       <h1>🧠 OpenPubQuiz</h1>
+
       {!role && (
         <>
           <button onClick={() => setRole('player')} style={{ marginRight: '1rem' }}>
             🎮 Join as Player
           </button>
-          <button onClick={() => setRole('host')}>🛠 Host a Quiz</button>
+          <button onClick={handleHost}>🛠 Host a Quiz</button>
         </>
       )}
 
@@ -51,6 +78,9 @@ function RoleSelect({ onSelectRole }) {
           </label>
           <br /><br />
           <button onClick={handleJoin}>✅ Join</button>
+          {errorMessage && (
+            <p style={{ color: 'red', marginTop: '1rem' }}>{errorMessage}</p>
+          )}
         </div>
       )}
     </div>

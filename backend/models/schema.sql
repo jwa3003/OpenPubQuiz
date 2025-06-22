@@ -1,6 +1,6 @@
 -- Table for quizzes
 CREATE TABLE IF NOT EXISTS quizzes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
 -- Table for questions (each belongs to a quiz)
 CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    quiz_id INTEGER NOT NULL,
+    quiz_id TEXT NOT NULL,
     text TEXT NOT NULL,
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
 );

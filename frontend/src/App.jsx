@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import RoleSelect from './components/RoleSelect';
 import PlayQuiz from './components/PlayQuiz';
+import HostDashboard from './components/HostDashboard';
 
 function App() {
   const [quizzes, setQuizzes] = useState([]);
@@ -22,58 +23,47 @@ function App() {
   const handleRoleSelect = (selectedRole, info) => {
     setRole(selectedRole);
     setPlayerInfo(info);
-  };
 
-  const renderPlayMode = () => {
-    if (selectedQuiz) {
-      return (
-        <PlayQuiz quiz={selectedQuiz} onBack={() => setSelectedQuiz(null)} />
-      );
+    // If hosting, create the quiz in the database
+    if (selectedRole === 'host' && info.quizId) {
+      fetch('http://localhost:3001/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: info.quizId, name: 'Untitled Quiz' }) // you can replace with dynamic name
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            console.log('✅ Quiz created!');
+          } else {
+            console.error('❌ Failed to create quiz:', data.error);
+          }
+        })
+        .catch((err) => {
+          console.error('❌ Error creating quiz:', err);
+        });
     }
-
-    return (
-      <div>
-        <h2>🎮 Select a Quiz to Play</h2>
-        {loading ? (
-          <p>Loading quizzes...</p>
-        ) : (
-          <ul>
-            {quizzes.map((quiz) => (
-              <li key={quiz.id}>
-                <button onClick={() => setSelectedQuiz(quiz)}>{quiz.name}</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
   };
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'Arial, sans-serif' }}>
-      {/* Step 1: Choose Host or Player */}
       {!role && <RoleSelect onSelectRole={handleRoleSelect} />}
 
-      {/* Step 2a: Player view (existing PlayQuiz flow) */}
       {role === 'player' && playerInfo && (
         <div>
           <h2>🎮 Player Mode</h2>
           <p>Welcome, <strong>{playerInfo.playerName}</strong>!</p>
           <p>Joining quiz with ID: <strong>{playerInfo.quizId}</strong></p>
-          {renderPlayMode()}
+          <PlayQuiz quizId={playerInfo.quizId} />
         </div>
       )}
 
-      {/* Step 2b: Host view (TODO: build HostDashboard) */}
       {role === 'host' && playerInfo && (
-        <div>
-          <h2>🛠 Host Mode</h2>
-          <p>You are hosting a quiz with ID: <strong>{playerInfo.quizId}</strong></p>
-          {/* TODO: Host dashboard goes here */}
-        </div>
+        <HostDashboard quizId={playerInfo.quizId} />
       )}
     </div>
   );
 }
 
 export default App;
+
