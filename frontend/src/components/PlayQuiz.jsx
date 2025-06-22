@@ -1,3 +1,4 @@
+import socket from '../socket';
 import { useEffect, useState } from 'react';
 
 function PlayQuiz({ quiz, onBack }) {
@@ -8,6 +9,17 @@ function PlayQuiz({ quiz, onBack }) {
   const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
+    socket.emit('joinRoom', `quiz-${quiz.id}`);
+
+    socket.on('timerStarted', () => {
+      alert('⏱ Timer started!');
+      // Later: start actual timer here
+    });
+
+    socket.on('nextQuestion', () => {
+      setCurrentIndex((prev) => prev + 1);
+    });
+
     fetch(`http://localhost:3001/api/question/quiz/${quiz.id}`)
       .then((res) => res.json())
       .then((qList) => {
@@ -23,6 +35,13 @@ function PlayQuiz({ quiz, onBack }) {
   }, [quiz.id]);
 
   const handleAnswer = (questionId, answerId) => {
+    socket.emit('submitAnswer', {
+      room: `quiz-${quiz.id}`,
+      questionId: currentQuestion.id,
+      answerId,
+      playerId: socket.id,
+    });
+
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: answerId }));
     setCurrentIndex((prev) => prev + 1);
   };
