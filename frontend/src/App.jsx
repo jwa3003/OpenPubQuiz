@@ -1,105 +1,77 @@
 import { useEffect, useState } from 'react';
-import './App.css';
+import RoleSelect from './components/RoleSelect';
+import PlayQuiz from './components/PlayQuiz';
 
 function App() {
-  const [mode, setMode] = useState(null); // 'host' or 'play'
   const [quizzes, setQuizzes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedQuiz, setSelectedQuiz] = useState(null);
-  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Load quizzes
-  const fetchQuizzes = () => {
-    setLoading(true);
+  const [role, setRole] = useState(null); // 'host' or 'player'
+  const [playerInfo, setPlayerInfo] = useState(null); // { playerName, quizId } or { quizId }
+
+  useEffect(() => {
     fetch('http://localhost:3001/api/quiz')
       .then((res) => res.json())
       .then((data) => {
         setQuizzes(data);
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Error fetching quizzes:', err);
-        setError('Could not load quizzes.');
-        setLoading(false);
       });
-  };
-
-  // Load questions for selected quiz
-  const fetchQuestions = (quizId) => {
-    fetch(`http://localhost:3001/api/question/quiz/${quizId}`)
-      .then((res) => res.json())
-      .then((data) => setQuestions(data))
-      .catch((err) => {
-        console.error('Error fetching questions:', err);
-        setError('Could not load questions.');
-      });
-  };
-
-  useEffect(() => {
-    fetchQuizzes();
   }, []);
 
-  const handleQuizSelect = (quiz) => {
-    setSelectedQuiz(quiz);
-    fetchQuestions(quiz.id);
+  const handleRoleSelect = (selectedRole, info) => {
+    setRole(selectedRole);
+    setPlayerInfo(info);
   };
 
-  const renderLanding = () => (
-    <div>
-      <h1>🧠 OpenPubQuiz</h1>
-      <button onClick={() => setMode('host')}>➕ Host a Quiz</button>
-      <button onClick={() => setMode('play')} style={{ marginLeft: '1rem' }}>
-        ▶️ Play a Quiz
-      </button>
-    </div>
-  );
+  const renderPlayMode = () => {
+    if (selectedQuiz) {
+      return (
+        <PlayQuiz quiz={selectedQuiz} onBack={() => setSelectedQuiz(null)} />
+      );
+    }
 
-  const renderPlayMode = () => (
-    <div>
-      <h2>🎮 Select a Quiz to Play</h2>
-      {loading ? (
-        <p>Loading quizzes...</p>
-      ) : (
-        <ul>
-          {quizzes.map((quiz) => (
-            <li key={quiz.id}>
-              <button onClick={() => handleQuizSelect(quiz)}>{quiz.name}</button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {selectedQuiz && (
-        <>
-          <h3>📝 Questions in {selectedQuiz.name}</h3>
-          {questions.length === 0 ? (
-            <p>No questions found for this quiz.</p>
-          ) : (
-            <ol>
-              {questions.map((q) => (
-                <li key={q.id}>{q.text}</li>
-              ))}
-            </ol>
-          )}
-        </>
-      )}
-    </div>
-  );
-
-  const renderHostMode = () => (
-    <div>
-      <h2>🛠 Host Mode (Coming Soon)</h2>
-      <p>You’ll be able to create full quizzes here!</p>
-    </div>
-  );
+    return (
+      <div>
+        <h2>🎮 Select a Quiz to Play</h2>
+        {loading ? (
+          <p>Loading quizzes...</p>
+        ) : (
+          <ul>
+            {quizzes.map((quiz) => (
+              <li key={quiz.id}>
+                <button onClick={() => setSelectedQuiz(quiz)}>{quiz.name}</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {!mode && renderLanding()}
-      {mode === 'host' && renderHostMode()}
-      {mode === 'play' && renderPlayMode()}
+    <div style={{ padding: '2rem', fontFamily: 'Arial, sans-serif' }}>
+      {/* Step 1: Choose Host or Player */}
+      {!role && <RoleSelect onSelectRole={handleRoleSelect} />}
+
+      {/* Step 2a: Player view (existing PlayQuiz flow) */}
+      {role === 'player' && playerInfo && (
+        <div>
+          <h2>🎮 Player Mode</h2>
+          <p>Welcome, <strong>{playerInfo.playerName}</strong>!</p>
+          <p>Joining quiz with ID: <strong>{playerInfo.quizId}</strong></p>
+          {renderPlayMode()}
+        </div>
+      )}
+
+      {/* Step 2b: Host view (TODO: build HostDashboard) */}
+      {role === 'host' && playerInfo && (
+        <div>
+          <h2>🛠 Host Mode</h2>
+          <p>You are hosting a quiz with ID: <strong>{playerInfo.quizId}</strong></p>
+          {/* TODO: Host dashboard goes here */}
+        </div>
+      )}
     </div>
   );
 }
