@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import socket from '../socket';
 
-function HostDashboard({ quizId }) {
+function HostDashboard({ sessionId, quizId, onBack }) {
   const [players, setPlayers] = useState([]);
 
   useEffect(() => {
-    socket.emit('joinRoom', { quizId, role: 'host' });
+    if (!sessionId) return;
+
+    socket.emit('joinRoom', { quizId, playerName: null, role: 'host', sessionId });
 
     const handleUserJoined = (player) => {
       setPlayers((prev) => {
@@ -21,12 +23,14 @@ function HostDashboard({ quizId }) {
     return () => {
       socket.off('userJoined', handleUserJoined);
     };
-  }, [quizId]);
+  }, [sessionId, quizId]);
 
   return (
     <div style={{ padding: '1rem' }}>
       <h2>🛠 Host Dashboard</h2>
       <p><strong>Quiz ID:</strong> <code>{quizId}</code></p>
+      <p><strong>Session ID:</strong> <code>{sessionId}</code></p>
+
       <h3>👥 Connected Players</h3>
       {players.length === 0 ? (
         <p>No players joined yet...</p>
@@ -37,6 +41,10 @@ function HostDashboard({ quizId }) {
           ))}
         </ul>
       )}
+
+      <button onClick={onBack} style={{ marginTop: '1rem' }}>
+        🔙 Back to Role Select
+      </button>
     </div>
   );
 }

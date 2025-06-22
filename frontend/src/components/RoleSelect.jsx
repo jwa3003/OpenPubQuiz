@@ -4,41 +4,71 @@ import socket from '../socket';
 function RoleSelect({ onSelectRole }) {
   const [role, setRole] = useState(null);
   const [playerName, setPlayerName] = useState('');
-  const [quizId, setQuizId] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   const handleJoin = () => {
-    if (!playerName || !quizId) {
-      setErrorMessage('Please enter both name and quiz ID.');
+    if (!playerName || !sessionId) {
+      setErrorMessage('Please enter both name and session ID.');
       return;
     }
 
-    // Check if the quiz exists before joining
-    fetch(`http://localhost:3001/api/quiz/${quizId}`)
+    fetch(`http://localhost:3001/api/sessions/${sessionId}`)
       .then((res) => {
-        if (!res.ok) {
-          throw new Error('Quiz not found');
-        }
+        if (!res.ok) throw new Error('Session not found');
         return res.json();
       })
-      .then(() => {
-        // Proceed to join as player
-        onSelectRole('player', { playerName, quizId });
+      .then((sessionData) => {
+        const quizId = sessionData.quiz_id;
+        onSelectRole('player', { playerName, sessionId, quizId });
 
         socket.emit('joinRoom', {
-          quizId,
+          sessionId,
           playerName,
           role: 'player',
         });
       })
-      .catch((err) => {
-        setErrorMessage('❌ Quiz ID not found. Please check and try again.');
+      .catch(() => {
+        setErrorMessage('❌ Session ID not found. Please check and try again.');
       });
   };
 
   const handleHost = () => {
     const generatedQuizId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    onSelectRole('host', { quizId: generatedQuizId });
+    const generatedSessionId = Math.random().toString(36).substring(2, 12).toUpperCase();
+
+    fetch('http://localhost:3001/api/quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: generatedQuizId, name: 'Untitled Quiz' }),
+    })
+      .then((res) => res.json())
+      .then(() =>
+        fetch('http://localhost:3001/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: generatedSessionId,
+            quiz_id: generatedQuizId,
+          }),
+        })
+      )
+      .then((res) => res.json())
+      .then(() => {
+        onSelectRole('host', {
+          sessionId: generatedSessionId,
+          quizId: generatedQuizId,
+        });
+
+        socket.emit('joinRoom', {
+          sessionId: generatedSessionId,
+          playerName: null,
+          role: 'host',
+        });
+      })
+      .catch(() => {
+        setErrorMessage('❌ Failed to create quiz or session. Please try again.');
+      });
   };
 
   return (
@@ -58,7 +88,7 @@ function RoleSelect({ onSelectRole }) {
         <div style={{ marginTop: '1.5rem' }}>
           <h2>Join Quiz</h2>
           <label>
-            Player Name:
+            Your Name:
             <input
               type="text"
               value={playerName}
@@ -68,19 +98,17 @@ function RoleSelect({ onSelectRole }) {
           </label>
           <br /><br />
           <label>
-            Quiz ID:
+            Session ID:
             <input
               type="text"
-              value={quizId}
-              onChange={(e) => setQuizId(e.target.value.toUpperCase())}
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value.toUpperCase())}
               style={{ marginLeft: '1rem' }}
             />
           </label>
           <br /><br />
           <button onClick={handleJoin}>✅ Join</button>
-          {errorMessage && (
-            <p style={{ color: 'red', marginTop: '1rem' }}>{errorMessage}</p>
-          )}
+          {errorMessage && <p style={{ color: 'red', marginTop: '1rem' }}>{errorMessage}</p>}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
-import socket from '../socket';
 import { useEffect, useState } from 'react';
+import socket from '../socket';
 
-function PlayQuiz({ quizId, onBack }) {
+function PlayQuiz({ sessionId, quizId, onBack }) {
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answersMap, setAnswersMap] = useState({});
@@ -12,9 +12,9 @@ function PlayQuiz({ quizId, onBack }) {
   const [quizStarted, setQuizStarted] = useState(false);
 
   useEffect(() => {
-    if (!quizId) return;
+    if (!sessionId || !quizId) return;
 
-    socket.emit('joinRoom', { quizId, role: 'player' });
+    socket.emit('joinRoom', { quizId, playerName: null, role: 'player', sessionId });
 
     socket.on('timerStarted', () => {
       alert('⏱ Timer started!');
@@ -50,7 +50,7 @@ function PlayQuiz({ quizId, onBack }) {
       socket.off('nextQuestion');
       socket.off('startQuiz');
     };
-  }, [quizId]);
+  }, [sessionId, quizId]);
 
   const fetchQuestionsAndAnswers = () => {
     fetch(`http://localhost:3001/api/questions/${quizId}`)
@@ -69,7 +69,8 @@ function PlayQuiz({ quizId, onBack }) {
 
   const handleAnswer = (questionId, answerId) => {
     socket.emit('submitAnswer', {
-      room: `quiz-${quizId}`,
+      sessionId,
+      quizId,
       questionId,
       answerId,
       playerId: socket.id,
