@@ -57,12 +57,15 @@ router.get('/:session_id', (req, res) => {
     });
 });
 
-// Update session status
+// Update session status (optional)
 router.put('/:session_id', (req, res) => {
     const { session_id } = req.params;
     const { status } = req.body;
 
-    if (!status) return res.status(400).json({ error: 'Missing status' });
+    if (typeof status === 'undefined') {
+        // No status provided, respond success without updating
+        return res.json({ success: true, message: 'No status update provided' });
+    }
 
     db.run(
         'UPDATE quiz_sessions SET status = ? WHERE session_id = ?',
