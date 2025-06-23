@@ -57,8 +57,12 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
                 };
     }, [sessionId]);
 
-    const handleNextQuestion = () => {
+    const handleStartNextQuestion = () => {
         socket.emit('next-question', { sessionId });
+    };
+
+    const handleStartTimer = () => {
+        socket.emit('start-timer', { sessionId });
     };
 
     const playersAnsweredCount = selectedPlayers.size;
@@ -77,7 +81,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         return (
             <div>
             <h3>Waiting for next question...</h3>
-            <button onClick={handleNextQuestion} disabled={countdown > 0}>
+            <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
             {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
             </button>
             <p>Players answered: {playersAnsweredCount} / {totalPlayersCount}</p>
@@ -92,7 +96,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
 
         <h4>Players answered: {playersAnsweredCount} / {totalPlayersCount}</h4>
 
-        <button onClick={handleNextQuestion} disabled={countdown > 0}>
+        <button onClick={handleStartTimer} disabled={countdown > 0}>
         {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
         </button>
         </div>

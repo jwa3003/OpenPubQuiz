@@ -110,9 +110,8 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
   };
 
   const handleAnswer = (answerId) => {
-    if (answerSubmittedRef.current) return; // no changes after submit
+    if (answerSubmittedRef.current) return;
     setSelectedAnswerId(answerId);
-    // Emit "answer-selected" immediately
     socket.emit('answer-selected', {
       sessionId,
       playerId: socket.id,
@@ -167,8 +166,12 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
       </li>
     ))}
     </ul>
-    {countdown > 0 && <p>Next question in: {countdown} seconds</p>}
-    </div>
+    <p style={{ marginTop: '1rem' }}>
+    {countdown > 0
+      ? `⏳ Time remaining: ${countdown} second${countdown === 1 ? '' : 's'}`
+      : '🕒 Waiting for next question...'}
+      </p>
+      </div>
   );
 }
 

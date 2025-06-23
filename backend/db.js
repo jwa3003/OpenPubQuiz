@@ -15,6 +15,7 @@ db.serialize(() => {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
   `);
+
   db.run(`
   CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +24,7 @@ db.serialize(() => {
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
   )
   `);
+
   db.run(`
   CREATE TABLE IF NOT EXISTS answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,10 +34,12 @@ db.serialize(() => {
     FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
   )
   `);
+
   db.run(`
   CREATE TABLE IF NOT EXISTS quiz_sessions (
     session_id TEXT PRIMARY KEY,
     quiz_id TEXT,
+    current_question_index INTEGER DEFAULT 0,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'waiting',
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
