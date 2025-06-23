@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import socket from '../socket';
 import QuizBuilder from './QuizBuilder';
+import HostQuiz from './HostQuiz';
 
 function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   const [players, setPlayers] = useState([]);
@@ -25,7 +26,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     });
 
     const handleUserJoined = (player) => {
-      if (player.role === 'host') return; // Exclude host
+      if (player.role === 'host') return; // Exclude host itself
       setPlayers((prev) => {
         if (!prev.find((p) => p.id === player.id)) {
           return [...prev, player];
@@ -138,68 +139,72 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     <strong>Session ID:</strong> <code>{sessionId}</code>
     </p>
 
-    {localQuizName ? (
-      <>
-      <p>
-      <strong>Quiz Name:</strong> {localQuizName}
-      </p>
-      <button onClick={handleStartQuiz} disabled={quizStarted} style={{ marginRight: '1rem' }}>
-      ▶️ Start Quiz
-      </button>
-      <button onClick={handleDeleteQuiz} disabled={quizStarted}>
-      🗑️ Delete Quiz
-      </button>
-      </>
-    ) : isCreatingQuiz ? (
-      <QuizBuilder onQuizCreated={onQuizCreated} onCancel={() => setIsCreatingQuiz(false)} />
-    ) : showQuizSelector ? (
-      <>
-      <p><strong>Select a Quiz:</strong></p>
-      <select
-      value={selectedQuizId}
-      onChange={(e) => setSelectedQuizId(e.target.value)}
-      style={{ minWidth: '200px' }}
-      >
-      <option value="">-- Choose a quiz --</option>
-      {quizzes.map((q) => (
-        <option key={q.id} value={q.id}>{q.name}</option>
-      ))}
-      </select>
-      <div style={{ marginTop: '1rem' }}>
-      <button onClick={handleConfirmLoadQuiz} disabled={!selectedQuizId}>
-      ✅ Load Selected Quiz
-      </button>
-      <button onClick={() => setShowQuizSelector(false)} style={{ marginLeft: '1rem' }}>
-      ❌ Cancel
-      </button>
-      </div>
-      </>
+    {quizStarted ? (
+      <HostQuiz sessionId={sessionId} quizId={localQuizId} players={players} onQuizEnd={() => setQuizStarted(false)} />
     ) : (
       <>
-      <p>
-      <strong>Quiz:</strong> <em>No quiz loaded yet</em>
-      </p>
-      <button onClick={() => setIsCreatingQuiz(true)}>➕ Create New Quiz</button>
-      <button onClick={() => setShowQuizSelector(true)}>📂 Load Existing Quiz</button>
+      {localQuizName ? (
+        <>
+        <p>
+        <strong>Quiz Name:</strong> {localQuizName}
+        </p>
+        <button onClick={handleStartQuiz} disabled={quizStarted} style={{ marginRight: '1rem' }}>
+        ▶️ Start Quiz
+        </button>
+        <button onClick={handleDeleteQuiz} disabled={quizStarted}>
+        🗑️ Delete Quiz
+        </button>
+        </>
+      ) : isCreatingQuiz ? (
+        <QuizBuilder onQuizCreated={onQuizCreated} onCancel={() => setIsCreatingQuiz(false)} />
+      ) : showQuizSelector ? (
+        <>
+        <p><strong>Select a Quiz:</strong></p>
+        <select
+        value={selectedQuizId}
+        onChange={(e) => setSelectedQuizId(e.target.value)}
+        style={{ minWidth: '200px' }}
+        >
+        <option value="">-- Choose a quiz --</option>
+        {quizzes.map((q) => (
+          <option key={q.id} value={q.id}>{q.name}</option>
+        ))}
+        </select>
+        <div style={{ marginTop: '1rem' }}>
+        <button onClick={handleConfirmLoadQuiz} disabled={!selectedQuizId}>
+        ✅ Load Selected Quiz
+        </button>
+        <button onClick={() => setShowQuizSelector(false)} style={{ marginLeft: '1rem' }}>
+        ❌ Cancel
+        </button>
+        </div>
+        </>
+      ) : (
+        <>
+        <p>
+        <strong>Quiz:</strong> <em>No quiz loaded yet</em>
+        </p>
+        <button onClick={() => setIsCreatingQuiz(true)}>➕ Create New Quiz</button>
+        <button onClick={() => setShowQuizSelector(true)}>📂 Load Existing Quiz</button>
+        </>
+      )}
+
+      <h3>👥 Connected Players</h3>
+      {players.length === 0 ? (
+        <p>No players joined yet...</p>
+      ) : (
+        <ul>
+        {players.map((p) => (
+          <li key={p.id}>{p.name}</li>
+        ))}
+        </ul>
+      )}
+
+      <button onClick={onBack} style={{ marginTop: '1rem' }}>
+      🔙 Back to Role Select
+      </button>
       </>
     )}
-
-    <h3>👥 Connected Players</h3>
-    {players.length === 0 ? (
-      <p>No players joined yet...</p>
-    ) : (
-      <ul>
-      {players.map((p) => (
-        <li key={p.id}>{p.name}</li>
-      ))}
-      </ul>
-    )}
-
-    {quizStarted && <p style={{ marginTop: '1rem', fontWeight: 'bold' }}>Quiz has started!</p>}
-
-    <button onClick={onBack} style={{ marginTop: '1rem' }}>
-    🔙 Back to Role Select
-    </button>
     </div>
   );
 }

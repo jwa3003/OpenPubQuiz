@@ -1,92 +1,135 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import socket from '../socket';
 
 function PlayQuiz({ sessionId, quizId, onBack }) {
   const [quiz, setQuiz] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [answersMap, setAnswersMap] = useState({});
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [selectedAnswerId, setSelectedAnswerId] = useState(null);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quizStarted, setQuizStarted] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const countdownRef = useRef(null);
+  const answerSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (!sessionId) return;
 
     socket.emit('joinRoom', { quizId, playerName: null, role: 'player', sessionId });
 
-    socket.on('timerStarted', () => {
-      alert('⏱ Timer started!');
-    });
-
-    socket.on('nextQuestion', () => {
-      setCurrentIndex((prev) => prev + 1);
-    });
-
     socket.on('quiz-started', () => {
       setQuizStarted(true);
+      resetForNewQuestion();
     });
 
-    socket.on('first-question', ({ question, answers }) => {
-      alert('📨 First question received: ' + question.text);
-      setQuestions([question]);
-      setAnswersMap((prev) => ({ ...prev, [question.id]: answers }));
+    socket.on('new-question', ({ question, answers }) => {
+      setCurrentQuestion(question);
+      setAnswers(answers);
+      setSelectedAnswerId(null);
+      setShowResults(false);
+      setCountdown(0);
+      answerSubmittedRef.current = false;
+      if (countdownRef.current) clearInterval(countdownRef.current);
     });
 
-    socket.on('quiz-loaded', ({ quizId: newQuizId, quizName }) => {
-      console.log(`🧠 Quiz loaded dynamically: ${quizName}`);
-      setQuiz({ id: newQuizId, name: quizName });
-      setLoading(false);
-    });
+      socket.on('countdown', (seconds) => {
+        setCountdown(seconds);
+        if (countdownRef.current) clearInterval(countdownRef.current);
+        let timeLeft = seconds;
 
-    // If we already have a quizId (e.g. from RoleSelect), load the quiz info
-    if (quizId) {
-      fetch(`http://localhost:3001/api/quiz/${quizId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Quiz not found');
-        return res.json();
-      })
-      .then((quizData) => {
-        setQuiz(quizData);
-        setLoading(false);
-      })
-      .catch(() => {
-        setQuiz(null);
-        setLoading(false);
+        countdownRef.current = setInterval(() => {
+          timeLeft -= 1;
+          setCountdown(timeLeft);
+
+          if (timeLeft <= 0) {
+            clearInterval(countdownRef.current);
+            submitAnswerIfNotSubmitted();
+          }
+        }, 1000);
       });
-    } else {
-      setLoading(false);
-    }
 
-    return () => {
-      socket.off('timerStarted');
-      socket.off('nextQuestion');
-      socket.off('quiz-started');
-      socket.off('first-question');
-      socket.off('quiz-loaded');
-    };
+      socket.on('quiz-ended', () => {
+        setQuizStarted(false);
+        setCurrentQuestion(null);
+        setAnswers([]);
+        setSelectedAnswerId(null);
+        setShowResults(true);
+        setCountdown(0);
+        answerSubmittedRef.current = false;
+        if (countdownRef.current) clearInterval(countdownRef.current);
+      });
+
+        socket.on('quiz-loaded', ({ quizId: newQuizId, quizName }) => {
+          console.log(`🧠 Quiz loaded dynamically: ${quizName}`);
+          setQuiz({ id: newQuizId, name: quizName });
+          setLoading(false);
+        });
+
+        if (quizId) {
+          fetch(`http://localhost:3001/api/quiz/${quizId}`)
+          .then((res) => (res.ok ? res.json() : Promise.reject()))
+          .then((quizData) => {
+            setQuiz(quizData);
+            setLoading(false);
+          })
+          .catch(() => {
+            setQuiz(null);
+            setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
+
+        return () => {
+          socket.off('quiz-started');
+          socket.off('new-question');
+          socket.off('countdown');
+          socket.off('quiz-ended');
+          socket.off('quiz-loaded');
+          if (countdownRef.current) clearInterval(countdownRef.current);
+        };
   }, [sessionId, quizId]);
 
-  const handleAnswer = (questionId, answerId) => {
-    socket.emit('submitAnswer', {
-      sessionId,
-      quizId: quiz?.id,
-      questionId,
-      answerId,
-      playerId: socket.id,
-    });
-
-    setSelectedAnswers((prev) => ({ ...prev, [questionId]: answerId }));
-    setCurrentIndex((prev) => prev + 1);
+  const resetForNewQuestion = () => {
+    setSelectedAnswerId(null);
+    answerSubmittedRef.current = false;
   };
 
-  const handleShowResults = () => {
-    setShowResults(true);
+  const submitAnswerIfNotSubmitted = () => {
+    if (!answerSubmittedRef.current && selectedAnswerId !== null) {
+      socket.emit('submitAnswer', {
+        sessionId,
+        quizId: quiz?.id,
+        questionId: currentQuestion.id,
+        answerId: selectedAnswerId,
+        playerId: socket.id,
+      });
+      answerSubmittedRef.current = true;
+    }
+  };
+
+  const handleAnswer = (answerId) => {
+    if (answerSubmittedRef.current) return; // no changes after submit
+    setSelectedAnswerId(answerId);
+    // Emit "answer-selected" immediately
+    socket.emit('answer-selected', {
+      sessionId,
+      playerId: socket.id,
+    });
   };
 
   if (loading) return <p>Loading quiz info...</p>;
   if (!quiz) return <p>Waiting for quiz to be selected...</p>;
+
+  if (showResults) {
+    return (
+      <div>
+      <h2>Quiz ended. Thanks for playing!</h2>
+      <button onClick={onBack}>Back</button>
+      </div>
+    );
+  }
 
   if (!quizStarted) {
     return (
@@ -97,70 +140,34 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
     );
   }
 
-  const currentQuestion = questions[currentIndex];
-  const currentAnswers = currentQuestion ? (answersMap[currentQuestion.id] || []) : [];
-
-  if (showResults) {
-    let correctCount = 0;
-    return (
-      <div>
-      <h2>📊 Results for {quiz.name}</h2>
-      {questions.map((q) => {
-        const correctAnswer = answersMap[q.id]?.find((a) => a.is_correct);
-        const selected = selectedAnswers[q.id];
-        const isCorrect = selected === correctAnswer?.id;
-        if (isCorrect) correctCount++;
-        return (
-          <div key={q.id} style={{ marginBottom: '1rem' }}>
-          <strong>{q.text}</strong>
-          <p>✅ Correct answer: <b>{correctAnswer?.text}</b></p>
-          <p style={{
-            color: isCorrect ? 'green' : 'red',
-            fontWeight: 'bold',
-          }}>
-          You answered: {answersMap[q.id]?.find((a) => a.id === selected)?.text || '—'} ({isCorrect ? 'Correct' : 'Incorrect'})
-          </p>
-          </div>
-        );
-      })}
-      <h3>Your Score: {correctCount} / {questions.length}</h3>
-      <button onClick={onBack}>🔙 Back</button>
-      </div>
-    );
-  }
-
-  if (currentIndex >= questions.length) {
-    return (
-      <div>
-      <h2>Done!</h2>
-      <button onClick={handleShowResults}>Show Results</button>
-      </div>
-    );
+  if (!currentQuestion) {
+    return <p>Waiting for next question...</p>;
   }
 
   return (
     <div>
     <h2>{quiz.name}</h2>
-    {currentQuestion ? (
-      <div>
-      <h3>Question {currentIndex + 1} of {questions.length}</h3>
-      <p><strong>{currentQuestion.text}</strong></p>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-      {currentAnswers.map((ans) => (
-        <li key={ans.id} style={{ marginBottom: '0.5rem' }}>
-        <button
-        onClick={() => handleAnswer(currentQuestion.id, ans.id)}
-        style={{ padding: '0.5rem 1rem' }}
-        >
-        {ans.text}
-        </button>
-        </li>
-      ))}
-      </ul>
-      </div>
-    ) : (
-      <p>Loading question...</p>
-    )}
+    <h3>{currentQuestion.text}</h3>
+    <ul style={{ listStyle: 'none', padding: 0 }}>
+    {answers.map((ans) => (
+      <li key={ans.id} style={{ marginBottom: '0.5rem' }}>
+      <button
+      onClick={() => handleAnswer(ans.id)}
+      style={{
+        padding: '0.5rem 1rem',
+        backgroundColor: selectedAnswerId === ans.id ? 'lightgreen' : '#f0f0f0',
+        color: '#000',
+        border: '1px solid #ccc',
+        cursor: answerSubmittedRef.current ? 'not-allowed' : 'pointer',
+      }}
+      disabled={answerSubmittedRef.current}
+      >
+      {ans.text || '(no text)'}
+      </button>
+      </li>
+    ))}
+    </ul>
+    {countdown > 0 && <p>Next question in: {countdown} seconds</p>}
     </div>
   );
 }

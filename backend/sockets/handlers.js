@@ -5,7 +5,7 @@ export default function socketHandlers(io) {
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
 
-        socket.on('joinRoom', ({ sessionId, playerName, role }) => {
+        socket.on('joinRoom', ({ sessionId, playerName, role, quizId }) => {
             if (!sessionId) {
                 socket.emit('error', { message: 'Missing sessionId' });
                 return;
@@ -25,6 +25,18 @@ export default function socketHandlers(io) {
 
                 if (role === 'player' && playerName) {
                     io.to(roomId).emit('userJoined', { id: socket.id, name: userName, role });
+                }
+
+                // Emit quiz-loaded event to the newly joined socket if session has a quiz
+                if (session.quiz_id) {
+                    db.get('SELECT * FROM quizzes WHERE id = ?', [session.quiz_id], (err, quiz) => {
+                        if (!err && quiz) {
+                            socket.emit('quiz-loaded', {
+                                quizId: quiz.id,
+                                quizName: quiz.name,
+                            });
+                        }
+                    });
                 }
             });
         });
@@ -68,7 +80,7 @@ export default function socketHandlers(io) {
                             }
 
                             console.log(`✅ Sending first question: "${question.text}" with ${answers.length} answers`);
-                            io.to(roomId).emit('first-question', {
+                            io.to(roomId).emit('new-question', {
                                 question,
                                 answers,
                             });
@@ -76,6 +88,29 @@ export default function socketHandlers(io) {
                     }
                 );
             });
+        });
+
+        // Player has selected an answer (not final)
+        socket.on('answer-selected', ({ sessionId, playerId }) => {
+            if (!sessionId || !playerId) return;
+            const roomId = `session-${sessionId}`;
+            // Notify hosts that this player selected an answer
+            io.to(roomId).emit('player-selected', { playerId });
+        });
+
+        // Player submits the final answer
+        socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, playerId }) => {
+            if (!sessionId || !quizId || !questionId || !answerId || !playerId) {
+                socket.emit('error', { message: 'Missing data for submitAnswer' });
+                return;
+            }
+
+            const roomId = `session-${sessionId}`;
+
+            // TODO: Save the answer to DB here if needed
+
+            // Notify hosts that this player answered (final)
+            io.to(roomId).emit('player-answered', { playerId });
         });
 
         socket.on('disconnect', () => {

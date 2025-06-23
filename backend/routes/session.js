@@ -1,21 +1,16 @@
-// backend/routes/session.js
 import express from 'express';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
-
-let io = null;
-export function registerSocketIO(ioInstance) {
-    io = ioInstance;
-}
+import { getIO } from '../socketInstance.js'; // We'll use this to get access to `io`
 
 const router = express.Router();
 
-// Create a new session
+// Create a new session (quiz_id is optional)
 router.post('/', (req, res) => {
     let { session_id, quiz_id = null } = req.body;
 
     if (!session_id) {
-        session_id = nanoid(4).toUpperCase();
+        session_id = nanoid(4).toUpperCase(); // 4-char code
     }
 
     const insertSession = () => {
@@ -40,7 +35,7 @@ router.post('/', (req, res) => {
     }
 });
 
-// Get session info
+// Get session info by session_id
 router.get('/:session_id', (req, res) => {
     const { session_id } = req.params;
 
@@ -61,7 +56,7 @@ router.get('/:session_id', (req, res) => {
     });
 });
 
-// Update session quiz_id or status
+// Update session quiz_id and/or status
 router.put('/:session_id', (req, res) => {
     const { session_id } = req.params;
     const { quiz_id, status } = req.body;
@@ -95,12 +90,13 @@ router.put('/:session_id', (req, res) => {
             return res.status(404).json({ error: 'Session not found' });
         }
 
-        // ✅ If quiz was updated, notify players in the room
-        if (quiz_id && io) {
-            db.get('SELECT name FROM quizzes WHERE id = ?', [quiz_id], (err, quiz) => {
+        // Broadcast quiz-loaded event if quiz_id changed
+        if (typeof quiz_id !== 'undefined') {
+            db.get('SELECT * FROM quizzes WHERE id = ?', [quiz_id], (err, quiz) => {
                 if (!err && quiz) {
+                    const io = getIO();
                     io.to(`session-${session_id}`).emit('quiz-loaded', {
-                        quizId: quiz_id,
+                        quizId: quiz.id,
                         quizName: quiz.name,
                     });
                 }
@@ -111,7 +107,7 @@ router.put('/:session_id', (req, res) => {
     });
 });
 
-// Delete quiz from session
+// DELETE quiz from session
 router.delete('/:session_id/quiz', (req, res) => {
     const { session_id } = req.params;
 
@@ -124,9 +120,6 @@ router.delete('/:session_id/quiz', (req, res) => {
         if (this.changes === 0) {
             return res.status(404).json({ error: 'Session not found' });
         }
-
-        // 🔕 (optional) Emit to players that quiz was removed
-
         res.json({ success: true, message: 'Quiz removed from session' });
     });
 });
