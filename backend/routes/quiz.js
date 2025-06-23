@@ -1,28 +1,24 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+// backend/routes/quiz.js
+import express from 'express';
+import db from '../db.js';
 
-// GET all quizzes
+const router = express.Router();
+
 router.get('/', (req, res) => {
   db.all('SELECT * FROM quizzes', (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
-  });
-});
-
-// POST a new quiz
-router.post('/', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'Quiz name is required' });
-
-  db.run('INSERT INTO quizzes (name) VALUES (?)', [name], function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: this.lastID, name });
+    res.json(rows);
   });
 });
 
-module.exports = router;
+router.post('/', (req, res) => {
+  const { id, name } = req.body;
+  if (!id || !name) return res.status(400).json({ error: 'Missing id or name' });
 
+  db.run('INSERT INTO quizzes (id, name) VALUES (?, ?)', [id, name], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.status(201).json({ id, name });
+  });
+});
+
+export default router;
