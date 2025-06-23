@@ -189,7 +189,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
         </>
       )}
 
-      <h3>👥 Connected Players</h3>
+      <h3>👥 Connected Teams</h3>
       {players.length === 0 ? (
         <p>No players joined yet...</p>
       ) : (

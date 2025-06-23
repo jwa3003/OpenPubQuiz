@@ -3,7 +3,7 @@ import socket from '../socket';
 
 function RoleSelect({ onSelectRole }) {
   const [role, setRole] = useState(null);
-  const [playerName, setPlayerName] = useState('');
+  const [teamName, setTeamName] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,7 +30,7 @@ function RoleSelect({ onSelectRole }) {
 
       socket.emit('joinRoom', {
         sessionId: data.session_id,
-        playerName: null,
+        teamName: null,   // host has no teamName
         role: 'host',
       });
     } catch (err) {
@@ -42,8 +42,8 @@ function RoleSelect({ onSelectRole }) {
 
   const handleJoin = () => {
     setErrorMessage('');
-    if (!playerName || !sessionId) {
-      setErrorMessage('Please enter both name and session ID.');
+    if (!teamName || !sessionId) {
+      setErrorMessage('Please enter both team name and session ID.');
       return;
     }
 
@@ -57,7 +57,7 @@ function RoleSelect({ onSelectRole }) {
     .then((sessionData) => {
       const { quiz_id, quiz_name } = sessionData;
       onSelectRole('player', {
-        playerName,
+        teamName,
         sessionId: sessionId.toUpperCase(),
                    quizId: quiz_id,
                    quizName: quiz_name,
@@ -65,7 +65,7 @@ function RoleSelect({ onSelectRole }) {
 
       socket.emit('joinRoom', {
         sessionId: sessionId.toUpperCase(),
-                  playerName,
+                  teamName,
                   role: 'player',
       });
     })
@@ -82,7 +82,7 @@ function RoleSelect({ onSelectRole }) {
     {!role && (
       <>
       <button onClick={() => setRole('player')} style={{ marginRight: '1rem' }}>
-      🎮 Join as Player
+      🎮 Join as Team
       </button>
       <button onClick={handleHost} disabled={loading}>
       {loading ? 'Creating...' : '🛠 Host a Quiz'}
@@ -95,11 +95,11 @@ function RoleSelect({ onSelectRole }) {
       <div style={{ marginTop: '1.5rem' }}>
       <h2>Join Quiz</h2>
       <label>
-      Your Name:
+      Team Name:
       <input
       type="text"
-      value={playerName}
-      onChange={(e) => setPlayerName(e.target.value)}
+      value={teamName}
+      onChange={(e) => setTeamName(e.target.value)}
       style={{ marginLeft: '1rem' }}
       disabled={loading}
       />

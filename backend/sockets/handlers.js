@@ -6,7 +6,7 @@ export default function socketHandlers(io) {
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
 
-        socket.on('joinRoom', ({ sessionId, playerName, role, quizId }) => {
+        socket.on('joinRoom', ({ sessionId, teamName, role, quizId }) => {
             if (!sessionId) {
                 socket.emit('error', { message: 'Missing sessionId' });
                 return;
@@ -22,9 +22,9 @@ export default function socketHandlers(io) {
                 socket.join(roomId);
                 console.log(`✅ ${socket.id} joined ${roomId}`);
 
-                const userName = playerName || (role === 'host' ? 'Host' : 'Player');
+                const userName = teamName || (role === 'host' ? 'Host' : 'Team');
 
-                if (role === 'player' && playerName) {
+                if (role === 'player' && teamName) {
                     io.to(roomId).emit('userJoined', { id: socket.id, name: userName, role });
                 }
 

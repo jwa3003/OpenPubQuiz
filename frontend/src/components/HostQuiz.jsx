@@ -84,7 +84,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
             {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
             </button>
-            <p>Players answered: {playersAnsweredCount} / {totalPlayersCount}</p>
+            <p>Teams answered: {playersAnsweredCount} / {totalPlayersCount}</p>
             </div>
         );
     }
@@ -94,7 +94,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         <h3>Current Question</h3>
         <p><strong>{currentQuestion.text}</strong></p>
 
-        <h4>Players answered: {playersAnsweredCount} / {totalPlayersCount}</h4>
+        <h4>Teams answered: {playersAnsweredCount} / {totalPlayersCount}</h4>
 
         <button onClick={handleStartTimer} disabled={countdown > 0}>
         {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}

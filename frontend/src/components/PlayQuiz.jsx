@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import socket from '../socket';
 
-function PlayQuiz({ sessionId, quizId, onBack }) {
+function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [quiz, setQuiz] = useState(null);
+  const [teamName, setTeamName] = useState(initialTeamName || '');
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [answers, setAnswers] = useState([]);
   const [selectedAnswerId, setSelectedAnswerId] = useState(null);
@@ -13,10 +14,15 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
   const countdownRef = useRef(null);
   const answerSubmittedRef = useRef(false);
 
+  // Update teamName state if prop changes
+  useEffect(() => {
+    setTeamName(initialTeamName || '');
+  }, [initialTeamName]);
+
   useEffect(() => {
     if (!sessionId) return;
 
-    socket.emit('joinRoom', { quizId, playerName: null, role: 'player', sessionId });
+    socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
 
     socket.on('quiz-started', () => {
       setQuizStarted(true);
@@ -64,6 +70,7 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
           console.log(`🧠 Quiz loaded dynamically: ${quizName}`);
           setQuiz({ id: newQuizId, name: quizName });
           setLoading(false);
+          // Keep the current teamName intact (no change here)
         });
 
         if (quizId) {
@@ -89,7 +96,7 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
           socket.off('quiz-loaded');
           if (countdownRef.current) clearInterval(countdownRef.current);
         };
-  }, [sessionId, quizId]);
+  }, [sessionId, quizId, teamName]);
 
   const resetForNewQuestion = () => {
     setSelectedAnswerId(null);
@@ -134,6 +141,7 @@ function PlayQuiz({ sessionId, quizId, onBack }) {
     return (
       <div>
       <h2>{quiz.name}</h2>
+      <p>Welcome Team, <strong>{teamName}</strong>!</p>
       <p>⏳ Waiting for the host to start the quiz...</p>
       </div>
     );
