@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
 -- Table for live quiz sessions
 CREATE TABLE IF NOT EXISTS quiz_sessions (
     session_id TEXT PRIMARY KEY,
-    quiz_id TEXT NOT NULL,
+    quiz_id TEXT NULL,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'waiting', -- waiting, active, finished, etc.
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
