@@ -9,7 +9,7 @@ import socketHandlers from './sockets/handlers.js';
 import quizRoutes from './routes/quiz.js';
 import questionRoutes from './routes/question.js';
 import answerRoutes from './routes/answer.js';
-import sessionRoutes from './routes/session.js';
+import sessionRoutes, { registerSocketIO } from './routes/session.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -29,8 +29,9 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/sessions', sessionRoutes);
 
-// Register Socket.IO handlers
+// Register Socket.IO handlers and pass it to session routes
 socketHandlers(io);
+registerSocketIO(io);
 
 const PORT = 3001;
 server.listen(PORT, () => {
