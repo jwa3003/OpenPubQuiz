@@ -25,21 +25,31 @@ const io = new Server(server, {
 // Make the Socket.IO instance available globally
 setIO(io);
 
-// Register socket event handlers
-socketHandlers(io);
+// Register socket event handlers WITHOUT passing io, since handlers will get it internally
+socketHandlers();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// REST API routes
 app.use('/api/quiz', quizRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/sessions', sessionRoutes);
 
-// Start the server
 const PORT = 3001;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+const HOST = '0.0.0.0'; // Listen on all interfaces
+
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on:`);
+  console.log(`   • http://localhost:${PORT}`);
+
+  import('os').then(os => {
+    const interfaces = os.networkInterfaces();
+    Object.values(interfaces)
+    .flat()
+    .filter(iface => iface.family === 'IPv4' && !iface.internal)
+    .forEach(iface => {
+      console.log(`   • http://${iface.address}:${PORT}`);
+    });
+  });
 });

@@ -3,6 +3,8 @@ import socket from '../socket';
 import QuizBuilder from './QuizBuilder';
 import HostQuiz from './HostQuiz';
 
+const API_BASE = `http://${window.location.hostname}:3001`;
+
 function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   const [teams, setTeams] = useState([]);
   const [localQuizId, setLocalQuizId] = useState(quizId);
@@ -10,7 +12,6 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   const [isCreatingQuiz, setIsCreatingQuiz] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
 
-  // Quiz selection UI
   const [quizzes, setQuizzes] = useState([]);
   const [showQuizSelector, setShowQuizSelector] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState('');
@@ -26,7 +27,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     });
 
     const handleTeamJoined = (team) => {
-      if (team.role === 'host') return; // Exclude host
+      if (team.role === 'host') return;
       setTeams((prev) => {
         if (!prev.find((t) => t.id === team.id)) {
           return [...prev, team];
@@ -48,10 +49,9 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     };
   }, [sessionId, localQuizId]);
 
-  // Fetch quizzes when needed
   useEffect(() => {
     if (showQuizSelector) {
-      fetch('http://localhost:3001/api/quiz')
+      fetch(`${API_BASE}/api/quiz`)
       .then((res) => res.json())
       .then((data) => setQuizzes(data))
       .catch((err) => alert('Failed to load quizzes: ' + err.message));
@@ -60,7 +60,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
 
   const onQuizCreated = async (id, name) => {
     try {
-      const updateRes = await fetch(`http://localhost:3001/api/sessions/${sessionId}`, {
+      const updateRes = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quiz_id: id }),
@@ -86,7 +86,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       const quiz = quizzes.find((q) => q.id === selectedQuizId);
       if (!quiz) throw new Error('Selected quiz not found');
 
-      const updateRes = await fetch(`http://localhost:3001/api/sessions/${sessionId}`, {
+      const updateRes = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quiz_id: selectedQuizId }),
@@ -109,7 +109,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/quiz/${localQuizId}`, {
+      const res = await fetch(`${API_BASE}/api/quiz/${localQuizId}`, {
         method: 'DELETE',
       });
 

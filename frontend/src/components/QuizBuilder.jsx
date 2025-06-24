@@ -1,57 +1,51 @@
 import { useState } from 'react';
 
+const API_BASE = `http://${window.location.hostname}:3001`;
+
 function QuizBuilder({ onQuizCreated, onCancel }) {
     const [quizName, setQuizName] = useState('');
     const [questions, setQuestions] = useState([]);
 
-    // Add a new empty question
     const addQuestion = () => {
         setQuestions([...questions, { text: '', answers: [{ text: '', is_correct: false }] }]);
     };
 
-    // Update question text
     const updateQuestionText = (index, text) => {
         const newQuestions = [...questions];
         newQuestions[index].text = text;
         setQuestions(newQuestions);
     };
 
-    // Add answer to question
     const addAnswer = (qIndex) => {
         const newQuestions = [...questions];
         newQuestions[qIndex].answers.push({ text: '', is_correct: false });
         setQuestions(newQuestions);
     };
 
-    // Update answer text
     const updateAnswerText = (qIndex, aIndex, text) => {
         const newQuestions = [...questions];
         newQuestions[qIndex].answers[aIndex].text = text;
         setQuestions(newQuestions);
     };
 
-    // Toggle correct answer checkbox
     const toggleCorrect = (qIndex, aIndex) => {
         const newQuestions = [...questions];
         newQuestions[qIndex].answers[aIndex].is_correct = !newQuestions[qIndex].answers[aIndex].is_correct;
         setQuestions(newQuestions);
     };
 
-    // Remove answer
     const removeAnswer = (qIndex, aIndex) => {
         const newQuestions = [...questions];
         newQuestions[qIndex].answers.splice(aIndex, 1);
         setQuestions(newQuestions);
     };
 
-    // Remove question
     const removeQuestion = (qIndex) => {
         const newQuestions = [...questions];
         newQuestions.splice(qIndex, 1);
         setQuestions(newQuestions);
     };
 
-    // Save quiz and questions + answers to backend
     const saveQuiz = async () => {
         if (!quizName.trim()) {
             alert('Quiz name is required');
@@ -63,8 +57,7 @@ function QuizBuilder({ onQuizCreated, onCancel }) {
         }
 
         try {
-            // 1. Create quiz
-            const quizRes = await fetch('http://localhost:3001/api/quiz', {
+            const quizRes = await fetch(`${API_BASE}/api/quiz`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: quizName }),
@@ -72,12 +65,10 @@ function QuizBuilder({ onQuizCreated, onCancel }) {
             if (!quizRes.ok) throw new Error('Failed to create quiz');
             const quizData = await quizRes.json();
 
-            // 2. Add questions and answers
             for (const q of questions) {
                 if (!q.text.trim()) continue;
 
-                // Create question
-                const questionRes = await fetch('http://localhost:3001/api/questions', {
+                const questionRes = await fetch(`${API_BASE}/api/questions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ quiz_id: quizData.id, text: q.text }),
@@ -85,10 +76,9 @@ function QuizBuilder({ onQuizCreated, onCancel }) {
                 if (!questionRes.ok) throw new Error('Failed to create question');
                 const questionData = await questionRes.json();
 
-                // Create answers
                 for (const a of q.answers) {
                     if (!a.text.trim()) continue;
-                    const answerRes = await fetch('http://localhost:3001/api/answers', {
+                    const answerRes = await fetch(`${API_BASE}/api/answers`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ question_id: questionData.id, text: a.text, is_correct: a.is_correct }),

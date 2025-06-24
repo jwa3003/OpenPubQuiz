@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import socket from '../socket';
 
+const API_BASE = `http://${window.location.hostname}:3001`;
+
 function RoleSelect({ onSelectRole }) {
   const [role, setRole] = useState(null);
   const [teamName, setTeamName] = useState('');
@@ -13,10 +15,10 @@ function RoleSelect({ onSelectRole }) {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:3001/api/sessions', {
+      const res = await fetch(`${API_BASE}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}), // No quiz_id
+        body: JSON.stringify({}),
       });
 
       if (!res.ok) throw new Error('Failed to create session');
@@ -30,7 +32,7 @@ function RoleSelect({ onSelectRole }) {
 
       socket.emit('joinRoom', {
         sessionId: data.session_id,
-        teamName: null,   // host has no teamName
+        teamName: null,
         role: 'host',
       });
     } catch (err) {
@@ -49,7 +51,7 @@ function RoleSelect({ onSelectRole }) {
 
     setLoading(true);
 
-    fetch(`http://localhost:3001/api/sessions/${sessionId.toUpperCase()}`)
+    fetch(`${API_BASE}/api/sessions/${sessionId.toUpperCase()}`)
     .then((res) => {
       if (!res.ok) throw new Error('Session not found');
       return res.json();

@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import socket from '../socket';
 
+const API_BASE = `http://${window.location.hostname}:3001`;
+
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [quiz, setQuiz] = useState(null);
   const [teamName, setTeamName] = useState(initialTeamName || '');
@@ -87,7 +89,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
     if (quizId) {
       setLoading(true);
-      fetch(`http://localhost:3001/api/quiz/${quizId}`)
+      fetch(`${API_BASE}/api/quiz/${quizId}`)  // ✅ FIXED: dynamic base URL
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((quizData) => {
         setQuiz(quizData);

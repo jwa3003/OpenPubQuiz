@@ -1,10 +1,14 @@
+// backend/sockets/handlers.js
 import db from '../db.js';
+import { getIO } from '../socketInstance.js';
 
 const timers = new Map(); // Store timers per session
 const scores = new Map(); // Map<sessionId, Map<socketId, score>>
 const teamNames = new Map(); // Map<socketId, teamName>
 
-export default function socketHandlers(io) {
+export default function socketHandlers() {
+    const io = getIO();
+
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
 
@@ -131,6 +135,7 @@ export default function socketHandlers(io) {
     });
 
     function sendNextQuestion(sessionId) {
+        const io = getIO();
         const roomId = `session-${sessionId}`;
 
         if (timers.has(sessionId)) {
@@ -173,6 +178,7 @@ export default function socketHandlers(io) {
     }
 
     function emitLeaderboard(sessionId) {
+        const io = getIO();
         const sessionScores = scores.get(sessionId);
         if (!sessionScores) return;
 
@@ -189,6 +195,7 @@ export default function socketHandlers(io) {
     }
 
     function startCountdown(sessionId) {
+        const io = getIO();
         const roomId = `session-${sessionId}`;
         let timeLeft = 10;
 
