@@ -8,7 +8,6 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [answers, setAnswers] = useState([]);
   const [selectedAnswerId, setSelectedAnswerId] = useState(null);
   const [showResults, setShowResults] = useState(false);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [quizStarted, setQuizStarted] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -16,20 +15,16 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const countdownRunningRef = useRef(false);
   const prevQuestionRef = useRef(null);
 
-  // Update teamName when initialTeamName prop changes
   useEffect(() => {
     setTeamName(initialTeamName || '');
   }, [initialTeamName]);
 
-  // Emit joinRoom when sessionId, quizId, and teamName are all set
   useEffect(() => {
     if (!sessionId || !quizId || !teamName) return;
-
     console.log('[PlayQuiz] Joining room with teamName:', teamName);
     socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
   }, [sessionId, quizId, teamName]);
 
-  // Setup socket event listeners
   useEffect(() => {
     if (!sessionId) return;
 
@@ -41,22 +36,15 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
     const onNewQuestion = ({ question, answers }) => {
       console.log('[PlayQuiz] New question received:', question);
-
-      // Submit answer for previous question before moving on
       if (prevQuestionRef.current) {
         submitAnswerForQuestion(prevQuestionRef.current);
       }
-
       setCurrentQuestion(question);
       setAnswers(answers);
       setSelectedAnswerId(null);
       setShowResults(false);
       setCountdown(0);
-
-      // Save current question for next submit
       prevQuestionRef.current = question;
-
-      // Reset countdown state
       countdownRunningRef.current = false;
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
@@ -67,32 +55,21 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     const onCountdown = (seconds) => {
       console.log('[PlayQuiz] Countdown update from server:', seconds);
       setCountdown(seconds);
-
-      // No manual countdown here; rely on server updates only
     };
 
     const onQuizEnded = () => {
       console.log('[PlayQuiz] Quiz ended');
-
-      // Submit answer for the last question before finishing
       submitAnswerForQuestion(currentQuestion);
-
       setQuizStarted(false);
       setCurrentQuestion(null);
       setAnswers([]);
       setSelectedAnswerId(null);
       setCountdown(0);
-
       countdownRunningRef.current = false;
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
         countdownRef.current = null;
       }
-    };
-
-    const onFinalLeaderboard = (scores) => {
-      console.log('[PlayQuiz] Final leaderboard received:', scores);
-      setLeaderboard(scores);
       setShowResults(true);
     };
 
@@ -106,10 +83,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     socket.on('new-question', onNewQuestion);
     socket.on('countdown', onCountdown);
     socket.on('quiz-ended', onQuizEnded);
-    socket.on('final-leaderboard', onFinalLeaderboard);
     socket.on('quiz-loaded', onQuizLoaded);
 
-    // Fetch quiz info on quizId change
     if (quizId) {
       setLoading(true);
       fetch(`http://localhost:3001/api/quiz/${quizId}`)
@@ -131,9 +106,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       socket.off('new-question', onNewQuestion);
       socket.off('countdown', onCountdown);
       socket.off('quiz-ended', onQuizEnded);
-      socket.off('final-leaderboard', onFinalLeaderboard);
       socket.off('quiz-loaded', onQuizLoaded);
-
       countdownRunningRef.current = false;
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
@@ -142,7 +115,6 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     };
   }, [sessionId, quizId, currentQuestion, selectedAnswerId, quiz]);
 
-  // Submit the answer for a given question, if any
   const submitAnswerForQuestion = (question) => {
     if (!question) {
       console.log('[PlayQuiz] No question provided for submit, skipping.');
@@ -168,7 +140,6 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     });
   };
 
-  // Handle user selecting an answer
   const handleAnswer = (answerId) => {
     console.log('[PlayQuiz] Answer selected:', answerId);
     setSelectedAnswerId(answerId);
@@ -178,7 +149,6 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     });
   };
 
-  // Reset answer selection when new question starts
   const resetForNewQuestion = () => {
     setSelectedAnswerId(null);
   };
@@ -190,17 +160,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     return (
       <div>
       <h2>🏁 Quiz Ended!</h2>
-      <h3>🏆 Final Leaderboard</h3>
-      <ol>
-      {leaderboard.map((entry, index) => (
-        <li
-        key={entry.teamName + index}
-        style={{ fontWeight: entry.teamName === teamName ? 'bold' : 'normal' }}
-        >
-        {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
-        </li>
-      ))}
-      </ol>
+      <p>The host will announce the winners.</p>
       <button onClick={onBack}>🔙 Back</button>
       </div>
     );
