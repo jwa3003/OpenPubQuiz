@@ -79,6 +79,16 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const teamsAnsweredCount = selectedTeams.size;
     const totalTeamsCount = players ? players.length : 0;
 
+    const formatRank = (rank) => {
+        if (rank === 1) return '🥇 1st';
+        if (rank === 2) return '🥈 2nd';
+        if (rank === 3) return '🥉 3rd';
+        const suffix = ['th', 'st', 'nd', 'rd'];
+        const v = rank % 100;
+        const suffixText = suffix[(v - 20) % 10] || suffix[v] || suffix[0];
+        return `${rank}${suffixText}`;
+    };
+
     if (quizEnded) {
         return (
             <div>
@@ -86,10 +96,10 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             {leaderboard.length > 0 && (
                 <>
                 <h3>🏆 Final Leaderboard</h3>
-                <ol>
+                <ol style={{ listStyleType: 'none', paddingLeft: 0 }}>
                 {leaderboard.map((entry, index) => (
                     <li key={`${entry.teamName}-${index}`}>
-                    {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
+                    {formatRank(index + 1)} {entry.teamName} with {entry.score} point{entry.score !== 1 ? 's' : ''}
                     </li>
                 ))}
                 </ol>
@@ -126,10 +136,10 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         {leaderboard.length > 0 && (
             <div style={{ marginTop: '1.5rem' }}>
             <h4>📊 Live Leaderboard</h4>
-            <ol>
+            <ol style={{ listStyleType: 'none', paddingLeft: 0 }}>
             {leaderboard.map((entry, index) => (
                 <li key={`${entry.teamName}-${index}`}>
-                {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
+                {formatRank(index + 1)} {entry.teamName} with {entry.score} point{entry.score !== 1 ? 's' : ''}
                 </li>
             ))}
             </ol>
