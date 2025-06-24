@@ -4,9 +4,10 @@ import socket from '../socket';
 function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [currentQuestion, setCurrentQuestion] = useState(null);
     const [answers, setAnswers] = useState([]);
-    const [selectedPlayers, setSelectedPlayers] = useState(new Set());
+    const [selectedTeams, setSelectedTeams] = useState(new Set());
     const [countdown, setCountdown] = useState(0);
     const [quizEnded, setQuizEnded] = useState(false);
+    const [leaderboard, setLeaderboard] = useState([]);
     const countdownRef = useRef(null);
 
     useEffect(() => {
@@ -15,16 +16,16 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         socket.on('new-question', ({ question, answers }) => {
             setCurrentQuestion(question);
             setAnswers(answers);
-            setSelectedPlayers(new Set());
+            setSelectedTeams(new Set());
             setQuizEnded(false);
             setCountdown(0);
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
-            socket.on('player-selected', ({ playerId }) => {
-                setSelectedPlayers((prev) => {
+            socket.on('team-selected', ({ teamId }) => {
+                setSelectedTeams((prev) => {
                     const newSet = new Set(prev);
-                    newSet.add(playerId);
+                    newSet.add(teamId);
                     return newSet;
                 });
             });
@@ -48,11 +49,21 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
                 if (countdownRef.current) clearInterval(countdownRef.current);
             });
 
+                socket.on('final-leaderboard', (scores) => {
+                    setLeaderboard(scores);
+                });
+
+                socket.on('score-update', (scores) => {
+                    setLeaderboard(scores);
+                });
+
                 return () => {
                     socket.off('new-question');
-                    socket.off('player-selected');
+                    socket.off('team-selected');
                     socket.off('countdown');
                     socket.off('quiz-ended');
+                    socket.off('final-leaderboard');
+                    socket.off('score-update');
                     if (countdownRef.current) clearInterval(countdownRef.current);
                 };
     }, [sessionId]);
@@ -65,40 +76,65 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         socket.emit('start-timer', { sessionId });
     };
 
-    const playersAnsweredCount = selectedPlayers.size;
-    const totalPlayersCount = players.length;
+    const teamsAnsweredCount = selectedTeams.size;
+    const totalTeamsCount = players ? players.length : 0;
 
     if (quizEnded) {
         return (
             <div>
-            <h2>Quiz Ended</h2>
-            <button onClick={onQuizEnd}>Back to Dashboard</button>
-            </div>
-        );
-    }
-
-    if (!currentQuestion) {
-        return (
-            <div>
-            <h3>Waiting for next question...</h3>
-            <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
-            {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
-            </button>
-            <p>Teams answered: {playersAnsweredCount} / {totalPlayersCount}</p>
+            <h2>🏁 Quiz Ended</h2>
+            {leaderboard.length > 0 && (
+                <>
+                <h3>🏆 Final Leaderboard</h3>
+                <ol>
+                {leaderboard.map((entry, index) => (
+                    <li key={`${entry.teamName}-${index}`}>
+                    {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
+                    </li>
+                ))}
+                </ol>
+                </>
+            )}
+            <button onClick={onQuizEnd}>🔙 Back to Dashboard</button>
             </div>
         );
     }
 
     return (
         <div>
-        <h3>Current Question</h3>
-        <p><strong>{currentQuestion.text}</strong></p>
+        {currentQuestion ? (
+            <>
+            <h3>Current Question</h3>
+            <p><strong>{currentQuestion.text}</strong></p>
 
-        <h4>Teams answered: {playersAnsweredCount} / {totalPlayersCount}</h4>
+            <h4>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</h4>
 
-        <button onClick={handleStartTimer} disabled={countdown > 0}>
-        {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
-        </button>
+            <button onClick={handleStartTimer} disabled={countdown > 0}>
+            {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
+            </button>
+            </>
+        ) : (
+            <div>
+            <h3>Waiting for next question...</h3>
+            <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
+            {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
+            </button>
+            <p>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</p>
+            </div>
+        )}
+
+        {leaderboard.length > 0 && (
+            <div style={{ marginTop: '1.5rem' }}>
+            <h4>📊 Live Leaderboard</h4>
+            <ol>
+            {leaderboard.map((entry, index) => (
+                <li key={`${entry.teamName}-${index}`}>
+                {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
+                </li>
+            ))}
+            </ol>
+            </div>
+        )}
         </div>
     );
 }

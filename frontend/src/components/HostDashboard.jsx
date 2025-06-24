@@ -4,7 +4,7 @@ import QuizBuilder from './QuizBuilder';
 import HostQuiz from './HostQuiz';
 
 function HostDashboard({ sessionId, quizId, quizName, onBack }) {
-  const [players, setPlayers] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [localQuizId, setLocalQuizId] = useState(quizId);
   const [localQuizName, setLocalQuizName] = useState(quizName);
   const [isCreatingQuiz, setIsCreatingQuiz] = useState(false);
@@ -25,11 +25,11 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       quizId: localQuizId || null,
     });
 
-    const handleUserJoined = (player) => {
-      if (player.role === 'host') return; // Exclude host itself
-      setPlayers((prev) => {
-        if (!prev.find((p) => p.id === player.id)) {
-          return [...prev, player];
+    const handleTeamJoined = (team) => {
+      if (team.role === 'host') return; // Exclude host
+      setTeams((prev) => {
+        if (!prev.find((t) => t.id === team.id)) {
+          return [...prev, team];
         }
         return prev;
       });
@@ -39,11 +39,11 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       setQuizStarted(true);
     };
 
-    socket.on('userJoined', handleUserJoined);
+    socket.on('teamJoined', handleTeamJoined);
     socket.on('quiz-started', handleQuizStarted);
 
     return () => {
-      socket.off('userJoined', handleUserJoined);
+      socket.off('teamJoined', handleTeamJoined);
       socket.off('quiz-started', handleQuizStarted);
     };
   }, [sessionId, localQuizId]);
@@ -140,7 +140,12 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     </p>
 
     {quizStarted ? (
-      <HostQuiz sessionId={sessionId} quizId={localQuizId} players={players} onQuizEnd={() => setQuizStarted(false)} />
+      <HostQuiz
+      sessionId={sessionId}
+      quizId={localQuizId}
+      players={teams}
+      onQuizEnd={() => setQuizStarted(false)}
+      />
     ) : (
       <>
       {localQuizName ? (
@@ -190,12 +195,12 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       )}
 
       <h3>👥 Connected Teams</h3>
-      {players.length === 0 ? (
-        <p>No players joined yet...</p>
+      {teams.length === 0 ? (
+        <p>No teams joined yet...</p>
       ) : (
         <ul>
-        {players.map((p) => (
-          <li key={p.id}>{p.name}</li>
+        {teams.map((t) => (
+          <li key={t.id}>{t.name}</li>
         ))}
         </ul>
       )}

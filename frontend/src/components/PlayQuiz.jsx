@@ -8,121 +8,179 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [answers, setAnswers] = useState([]);
   const [selectedAnswerId, setSelectedAnswerId] = useState(null);
   const [showResults, setShowResults] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [quizStarted, setQuizStarted] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const countdownRef = useRef(null);
-  const answerSubmittedRef = useRef(false);
+  const countdownRunningRef = useRef(false);
+  const prevQuestionRef = useRef(null);
 
-  // Update teamName state if prop changes
+  // Update teamName when initialTeamName prop changes
   useEffect(() => {
     setTeamName(initialTeamName || '');
   }, [initialTeamName]);
 
+  // Emit joinRoom when sessionId, quizId, and teamName are all set
+  useEffect(() => {
+    if (!sessionId || !quizId || !teamName) return;
+
+    console.log('[PlayQuiz] Joining room with teamName:', teamName);
+    socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
+  }, [sessionId, quizId, teamName]);
+
+  // Setup socket event listeners
   useEffect(() => {
     if (!sessionId) return;
 
-    socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
-
-    socket.on('quiz-started', () => {
+    const onQuizStarted = () => {
+      console.log('[PlayQuiz] Quiz started');
       setQuizStarted(true);
       resetForNewQuestion();
-    });
+    };
 
-    socket.on('new-question', ({ question, answers }) => {
+    const onNewQuestion = ({ question, answers }) => {
+      console.log('[PlayQuiz] New question received:', question);
+
+      // Submit answer for previous question before moving on
+      if (prevQuestionRef.current) {
+        submitAnswerForQuestion(prevQuestionRef.current);
+      }
+
       setCurrentQuestion(question);
       setAnswers(answers);
       setSelectedAnswerId(null);
       setShowResults(false);
       setCountdown(0);
-      answerSubmittedRef.current = false;
-      if (countdownRef.current) clearInterval(countdownRef.current);
+
+      // Save current question for next submit
+      prevQuestionRef.current = question;
+
+      // Reset countdown state
+      countdownRunningRef.current = false;
+      if (countdownRef.current) {
+        clearTimeout(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+
+    const onCountdown = (seconds) => {
+      console.log('[PlayQuiz] Countdown update from server:', seconds);
+      setCountdown(seconds);
+
+      // No manual countdown here; rely on server updates only
+    };
+
+    const onQuizEnded = () => {
+      console.log('[PlayQuiz] Quiz ended');
+
+      // Submit answer for the last question before finishing
+      submitAnswerForQuestion(currentQuestion);
+
+      setQuizStarted(false);
+      setCurrentQuestion(null);
+      setAnswers([]);
+      setSelectedAnswerId(null);
+      setCountdown(0);
+
+      countdownRunningRef.current = false;
+      if (countdownRef.current) {
+        clearTimeout(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+
+    const onFinalLeaderboard = (scores) => {
+      console.log('[PlayQuiz] Final leaderboard received:', scores);
+      setLeaderboard(scores);
+      setShowResults(true);
+    };
+
+    const onQuizLoaded = ({ quizId: newQuizId, quizName }) => {
+      console.log(`[PlayQuiz] Quiz loaded dynamically: ${quizName}`);
+      setQuiz({ id: newQuizId, name: quizName });
+      setLoading(false);
+    };
+
+    socket.on('quiz-started', onQuizStarted);
+    socket.on('new-question', onNewQuestion);
+    socket.on('countdown', onCountdown);
+    socket.on('quiz-ended', onQuizEnded);
+    socket.on('final-leaderboard', onFinalLeaderboard);
+    socket.on('quiz-loaded', onQuizLoaded);
+
+    // Fetch quiz info on quizId change
+    if (quizId) {
+      setLoading(true);
+      fetch(`http://localhost:3001/api/quiz/${quizId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((quizData) => {
+        setQuiz(quizData);
+        setLoading(false);
+      })
+      .catch(() => {
+        setQuiz(null);
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
+    }
+
+    return () => {
+      socket.off('quiz-started', onQuizStarted);
+      socket.off('new-question', onNewQuestion);
+      socket.off('countdown', onCountdown);
+      socket.off('quiz-ended', onQuizEnded);
+      socket.off('final-leaderboard', onFinalLeaderboard);
+      socket.off('quiz-loaded', onQuizLoaded);
+
+      countdownRunningRef.current = false;
+      if (countdownRef.current) {
+        clearTimeout(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+  }, [sessionId, quizId, currentQuestion, selectedAnswerId, quiz]);
+
+  // Submit the answer for a given question, if any
+  const submitAnswerForQuestion = (question) => {
+    if (!question) {
+      console.log('[PlayQuiz] No question provided for submit, skipping.');
+      return;
+    }
+
+    const answerIdToSubmit = selectedAnswerId !== null ? selectedAnswerId : null;
+
+    console.log('[PlayQuiz] Submitting answer for question:', question.id, {
+      sessionId,
+      quizId: quiz?.id,
+      questionId: question.id,
+      answerId: answerIdToSubmit,
+      teamId: socket.id,
     });
 
-      socket.on('countdown', (seconds) => {
-        setCountdown(seconds);
-        if (countdownRef.current) clearInterval(countdownRef.current);
-        let timeLeft = seconds;
-
-        countdownRef.current = setInterval(() => {
-          timeLeft -= 1;
-          setCountdown(timeLeft);
-
-          if (timeLeft <= 0) {
-            clearInterval(countdownRef.current);
-            submitAnswerIfNotSubmitted();
-          }
-        }, 1000);
-      });
-
-      socket.on('quiz-ended', () => {
-        setQuizStarted(false);
-        setCurrentQuestion(null);
-        setAnswers([]);
-        setSelectedAnswerId(null);
-        setShowResults(true);
-        setCountdown(0);
-        answerSubmittedRef.current = false;
-        if (countdownRef.current) clearInterval(countdownRef.current);
-      });
-
-        socket.on('quiz-loaded', ({ quizId: newQuizId, quizName }) => {
-          console.log(`🧠 Quiz loaded dynamically: ${quizName}`);
-          setQuiz({ id: newQuizId, name: quizName });
-          setLoading(false);
-          // Keep the current teamName intact (no change here)
-        });
-
-        if (quizId) {
-          fetch(`http://localhost:3001/api/quiz/${quizId}`)
-          .then((res) => (res.ok ? res.json() : Promise.reject()))
-          .then((quizData) => {
-            setQuiz(quizData);
-            setLoading(false);
-          })
-          .catch(() => {
-            setQuiz(null);
-            setLoading(false);
-          });
-        } else {
-          setLoading(false);
-        }
-
-        return () => {
-          socket.off('quiz-started');
-          socket.off('new-question');
-          socket.off('countdown');
-          socket.off('quiz-ended');
-          socket.off('quiz-loaded');
-          if (countdownRef.current) clearInterval(countdownRef.current);
-        };
-  }, [sessionId, quizId, teamName]);
-
-  const resetForNewQuestion = () => {
-    setSelectedAnswerId(null);
-    answerSubmittedRef.current = false;
+    socket.emit('submitAnswer', {
+      sessionId,
+      quizId: quiz?.id,
+      questionId: question.id,
+      answerId: answerIdToSubmit,
+      teamId: socket.id,
+    });
   };
 
-  const submitAnswerIfNotSubmitted = () => {
-    if (!answerSubmittedRef.current && selectedAnswerId !== null) {
-      socket.emit('submitAnswer', {
-        sessionId,
-        quizId: quiz?.id,
-        questionId: currentQuestion.id,
-        answerId: selectedAnswerId,
-        playerId: socket.id,
-      });
-      answerSubmittedRef.current = true;
-    }
-  };
-
+  // Handle user selecting an answer
   const handleAnswer = (answerId) => {
-    if (answerSubmittedRef.current) return;
+    console.log('[PlayQuiz] Answer selected:', answerId);
     setSelectedAnswerId(answerId);
     socket.emit('answer-selected', {
       sessionId,
-      playerId: socket.id,
+      teamId: socket.id,
     });
+  };
+
+  // Reset answer selection when new question starts
+  const resetForNewQuestion = () => {
+    setSelectedAnswerId(null);
   };
 
   if (loading) return <p>Loading quiz info...</p>;
@@ -131,8 +189,19 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (showResults) {
     return (
       <div>
-      <h2>Quiz ended. Thanks for playing!</h2>
-      <button onClick={onBack}>Back</button>
+      <h2>🏁 Quiz Ended!</h2>
+      <h3>🏆 Final Leaderboard</h3>
+      <ol>
+      {leaderboard.map((entry, index) => (
+        <li
+        key={entry.teamName + index}
+        style={{ fontWeight: entry.teamName === teamName ? 'bold' : 'normal' }}
+        >
+        {index + 1}. {entry.teamName} — {entry.score} pt{entry.score !== 1 ? 's' : ''}
+        </li>
+      ))}
+      </ol>
+      <button onClick={onBack}>🔙 Back</button>
       </div>
     );
   }
@@ -141,7 +210,9 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     return (
       <div>
       <h2>{quiz.name}</h2>
-      <p>Welcome Team, <strong>{teamName}</strong>!</p>
+      <p>
+      Welcome Team, <strong>{teamName}</strong>!
+      </p>
       <p>⏳ Waiting for the host to start the quiz...</p>
       </div>
     );
@@ -165,9 +236,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
         backgroundColor: selectedAnswerId === ans.id ? 'lightgreen' : '#f0f0f0',
         color: '#000',
         border: '1px solid #ccc',
-        cursor: answerSubmittedRef.current ? 'not-allowed' : 'pointer',
+        cursor: 'pointer',
       }}
-      disabled={answerSubmittedRef.current}
       >
       {ans.text || '(no text)'}
       </button>
