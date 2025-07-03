@@ -30,6 +30,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   useEffect(() => {
     if (!sessionId) return;
 
+    let quizLoadedFromSocket = false;
+
     const onQuizStarted = () => {
       console.log('[PlayQuiz] Quiz started');
       setQuizStarted(true);
@@ -79,6 +81,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       console.log(`[PlayQuiz] Quiz loaded dynamically: ${quizName}`);
       setQuiz({ id: newQuizId, name: quizName });
       setLoading(false);
+      quizLoadedFromSocket = true;
     };
 
     socket.on('quiz-started', onQuizStarted);
@@ -87,18 +90,20 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     socket.on('quiz-ended', onQuizEnded);
     socket.on('quiz-loaded', onQuizLoaded);
 
-    if (quizId) {
+    // Only fetch if quiz is not already set by socket event
+    if (quizId && !quiz) {
       setLoading(true);
-      fetch(`${API_BASE}/api/quiz/${quizId}`)  // ✅ FIXED: dynamic base URL
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((quizData) => {
-        setQuiz(quizData);
-        setLoading(false);
-      })
-      .catch(() => {
-        setQuiz(null);
-        setLoading(false);
-      });
+      fetch(`${API_BASE}/api/quiz/${quizId}`)
+        .then((res) => (res.ok ? res.json() : Promise.reject()))
+        .then((quizData) => {
+          // Only set if not already set by socket event
+          if (!quizLoadedFromSocket) setQuiz(quizData);
+          setLoading(false);
+        })
+        .catch(() => {
+          setQuiz(null);
+          setLoading(false);
+        });
     } else {
       setLoading(false);
     }
