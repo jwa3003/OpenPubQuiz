@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import socket from '../socket';
+import socket from '../../socket';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
@@ -61,14 +61,14 @@ function RoleSelect({ onSelectRole }) {
       onSelectRole('player', {
         teamName,
         sessionId: sessionId.toUpperCase(),
-                   quizId: quiz_id,
-                   quizName: quiz_name,
+        quizId: quiz_id,
+        quizName: quiz_name,
       });
 
       socket.emit('joinRoom', {
         sessionId: sessionId.toUpperCase(),
-                  teamName,
-                  role: 'player',
+        teamName,
+        role: 'player',
       });
     })
     .catch(() => {

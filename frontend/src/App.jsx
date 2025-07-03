@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import RoleSelect from './components/RoleSelect';
-import PlayQuiz from './components/PlayQuiz';
-import HostDashboard from './components/HostDashboard';
+import RoleSelect from './components/common/RoleSelect';
+import PlayQuiz from './components/player/PlayQuiz';
+import HostDashboard from './components/host/HostDashboard';
 
 function App() {
   const [role, setRole] = useState(null);

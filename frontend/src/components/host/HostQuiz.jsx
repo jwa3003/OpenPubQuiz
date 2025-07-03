@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import socket from '../socket';
+import socket from '../../socket';
 
 function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [currentQuestion, setCurrentQuestion] = useState(null);

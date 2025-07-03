@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import socket from '../socket';
+import socket from '../../socket';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 

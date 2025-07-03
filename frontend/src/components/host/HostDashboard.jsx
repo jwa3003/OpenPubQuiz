@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import socket from '../socket';
-import QuizBuilder from './QuizBuilder';
+import socket from '../../socket';
+import QuizBuilder from '../quiz/QuizBuilder';
 import HostQuiz from './HostQuiz';
 
 const API_BASE = `http://${window.location.hostname}:3001`;

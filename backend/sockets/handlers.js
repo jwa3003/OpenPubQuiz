@@ -1,6 +1,6 @@
 // backend/sockets/handlers.js
 import db from '../db.js';
-import { getIO } from '../socketInstance.js';
+import { getIO } from '../utils/socketInstance.js';
 
 const timers = new Map(); // Store timers per session
 const scores = new Map(); // Map<sessionId, Map<socketId, score>>

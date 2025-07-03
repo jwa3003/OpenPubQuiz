@@ -1,4 +1,4 @@
-// backend/socketInstance.js
+// backend/utils/socketInstance.js
 
 let io = null;
 

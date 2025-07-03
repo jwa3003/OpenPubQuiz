@@ -4,9 +4,9 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import http from 'http';
 
-import db from './db.js';
+import db from './db/db.js';
 import socketHandlers from './sockets/handlers.js';
-import { setIO } from './socketInstance.js';
+import { setIO } from './utils/socketInstance.js';
 
 import quizRoutes from './routes/quiz.js';
 import questionRoutes from './routes/question.js';
