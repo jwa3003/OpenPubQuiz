@@ -4,18 +4,42 @@ import socket from '../../socket';
 const API_BASE = `http://${window.location.hostname}:3001`;
 
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
-  const [quiz, setQuiz] = useState(null);
+  // Try to load persisted state
+  const persisted = (() => {
+    try {
+      const data = localStorage.getItem('playQuizState');
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  const [quiz, setQuiz] = useState(persisted.quiz || null);
   const [teamName, setTeamName] = useState(initialTeamName || '');
-  const [currentQuestion, setCurrentQuestion] = useState(null);
-  const [answers, setAnswers] = useState([]);
-  const [selectedAnswerId, setSelectedAnswerId] = useState(null);
-  const [showResults, setShowResults] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState(persisted.currentQuestion || null);
+  const [answers, setAnswers] = useState(persisted.answers || []);
+  const [selectedAnswerId, setSelectedAnswerId] = useState(persisted.selectedAnswerId || null);
+  const [showResults, setShowResults] = useState(persisted.showResults || false);
   const [loading, setLoading] = useState(true);
-  const [quizStarted, setQuizStarted] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [quizStarted, setQuizStarted] = useState(persisted.quizStarted || false);
+  const [countdown, setCountdown] = useState(persisted.countdown || 0);
   const countdownRef = useRef(null);
   const countdownRunningRef = useRef(false);
   const prevQuestionRef = useRef(null);
+  // Persist state to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('playQuizState', JSON.stringify({
+        quiz,
+        currentQuestion,
+        answers,
+        selectedAnswerId,
+        showResults,
+        quizStarted,
+        countdown
+      }));
+    } catch {}
+  }, [quiz, currentQuestion, answers, selectedAnswerId, showResults, quizStarted, countdown]);
 
   useEffect(() => {
     setTeamName(initialTeamName || '');
@@ -23,8 +47,18 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
   useEffect(() => {
     if (!sessionId || !quizId || !teamName) return;
-    console.log('[PlayQuiz] Joining room with teamName:', teamName);
-    socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
+
+    const emitJoinRoom = () => {
+      console.log('[PlayQuiz] Joining room with teamName:', teamName);
+      socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
+    };
+
+    // Emit joinRoom on mount and on socket reconnect
+    emitJoinRoom();
+    socket.on('connect', emitJoinRoom);
+    return () => {
+      socket.off('connect', emitJoinRoom);
+    };
   }, [sessionId, quizId, teamName]);
 
   useEffect(() => {
@@ -168,7 +202,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       <div>
       <h2>🏁 Quiz Ended!</h2>
       <p>The host will announce the winners.</p>
-      <button onClick={onBack}>🔙 Back</button>
+      <button onClick={() => {
+        try { localStorage.removeItem('playQuizState'); } catch {}
+        onBack();
+      }}>🔙 Back</button>
       </div>
     );
   }
@@ -181,6 +218,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       Welcome Team, <strong>{teamName}</strong>!
       </p>
       <p>⏳ Waiting for the host to start the quiz...</p>
+      <button onClick={() => {
+        try { localStorage.removeItem('playQuizState'); } catch {}
+        onBack();
+      }} style={{ marginTop: '1rem' }}>🔙 Back</button>
       </div>
     );
   }
