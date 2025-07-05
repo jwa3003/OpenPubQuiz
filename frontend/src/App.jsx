@@ -69,9 +69,6 @@ function App() {
 
       {role === 'player' && sessionInfo && (
         <div>
-          <h2>🎮 Player Mode</h2>
-          <p>Welcome Team, <strong>{sessionInfo.teamName}</strong>!</p>
-          <p>Joining session: <strong>{sessionInfo.sessionId}</strong></p>
           <PlayQuiz
             sessionId={sessionInfo.sessionId}
             quizId={sessionInfo.quizId}

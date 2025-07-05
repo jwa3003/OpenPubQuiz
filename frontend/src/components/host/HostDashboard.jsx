@@ -59,21 +59,11 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   }, [showQuizSelector]);
 
   const onQuizCreated = async (id, name) => {
-    try {
-      const updateRes = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quiz_id: id }),
-      });
-      if (!updateRes.ok) throw new Error('Failed to update session with quiz');
-
-      setLocalQuizId(id);
-      setLocalQuizName(name);
-      setIsCreatingQuiz(false);
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
-    }
+    setLocalQuizId(id);
+    setLocalQuizName(name);
+    setIsCreatingQuiz(false);
+    // Optionally, notify the user that the quiz is ready to be loaded into a session
+    alert('Quiz created! To use it, select it from "Load Existing Quiz".');
   };
 
   const handleConfirmLoadQuiz = async () => {
@@ -91,7 +81,14 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quiz_id: selectedQuizId }),
       });
-      if (!updateRes.ok) throw new Error('Failed to update session with quiz');
+      if (!updateRes.ok) {
+        if (updateRes.status === 404) {
+          alert('Session not found. Please start a new session as host.');
+        } else {
+          alert('Failed to update session with quiz.');
+        }
+        return;
+      }
 
       setLocalQuizId(selectedQuizId);
       setLocalQuizName(quiz.name);

@@ -8,10 +8,13 @@ import db from './db/db.js';
 import socketHandlers from './sockets/handlers.js';
 import { setIO } from './utils/socketInstance.js';
 
+
 import quizRoutes from './routes/quiz.js';
 import questionRoutes from './routes/question.js';
 import answerRoutes from './routes/answer.js';
 import sessionRoutes from './routes/session.js';
+import categoryRoutes from './routes/category.js';
+import fullQuizRoutes from './routes/fullQuiz.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -35,6 +38,8 @@ app.use('/api/quiz', quizRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/quiz', fullQuizRoutes); // /api/quiz/:quizId/full
 
 const PORT = 3001;
 const HOST = '0.0.0.0'; // Listen on all interfaces

@@ -127,7 +127,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     // Only fetch if quiz is not already set by socket event
     if (quizId && !quiz) {
       setLoading(true);
-      fetch(`${API_BASE}/api/quiz/${quizId}`)
+      fetch(`${API_BASE}/api/quiz/${quizId}/full`)
         .then((res) => (res.ok ? res.json() : Promise.reject()))
         .then((quizData) => {
           // Only set if not already set by socket event
@@ -197,6 +197,34 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (loading) return <p>Loading quiz info...</p>;
   if (!quiz) return <p>Waiting for quiz to be selected...</p>;
 
+  // If quiz has categories, show them (for debug/demo)
+  if (quiz.categories && quiz.categories.length > 0 && !quizStarted) {
+    return (
+      <div>
+        <h2>Quiz Lobby</h2>
+        <h3>Welcome, <strong>{teamName}</strong>!</h3>
+        <h4>Categories:</h4>
+        <ul>
+          {quiz.categories.map((cat) => (
+            <li key={cat.id}>
+              <strong>{cat.name}</strong>
+              <ul>
+                {cat.questions && cat.questions.length > 0 ? cat.questions.map((q) => (
+                  <li key={q.id}>{q.text} ({q.answers.length} answers)</li>
+                )) : <li>No questions</li>}
+              </ul>
+            </li>
+          ))}
+        </ul>
+        <p>⏳ Waiting for the host to start the quiz...</p>
+        <button onClick={() => {
+          try { localStorage.removeItem('playQuizState'); } catch {}
+          onBack();
+        }} style={{ marginTop: '1rem' }}>🔙 Back</button>
+      </div>
+    );
+  }
+
   if (showResults) {
     return (
       <div>
@@ -213,15 +241,13 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (!quizStarted) {
     return (
       <div>
-      <h2>{quiz.name}</h2>
-      <p>
-      Welcome Team, <strong>{teamName}</strong>!
-      </p>
-      <p>⏳ Waiting for the host to start the quiz...</p>
-      <button onClick={() => {
-        try { localStorage.removeItem('playQuizState'); } catch {}
-        onBack();
-      }} style={{ marginTop: '1rem' }}>🔙 Back</button>
+        <h2>Quiz Lobby</h2>
+        <h3>Welcome, <strong>{teamName}</strong>!</h3>
+        <p>⏳ Waiting for the host to start the quiz...</p>
+        <button onClick={() => {
+          try { localStorage.removeItem('playQuizState'); } catch {}
+          onBack();
+        }} style={{ marginTop: '1rem' }}>🔙 Back</button>
       </div>
     );
   }
@@ -229,35 +255,39 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (!currentQuestion) {
     return <p>Waiting for next question...</p>;
   }
+  // Always use backend-sent categoryName for display
+  const categoryName = currentQuestion?.categoryName;
 
   return (
     <div>
-    <h2>{quiz.name}</h2>
-    <h3>{currentQuestion.text}</h3>
-    <ul style={{ listStyle: 'none', padding: 0 }}>
-    {answers.map((ans) => (
-      <li key={ans.id} style={{ marginBottom: '0.5rem' }}>
-      <button
-      onClick={() => handleAnswer(ans.id)}
-      style={{
-        padding: '0.5rem 1rem',
-        backgroundColor: selectedAnswerId === ans.id ? 'lightgreen' : '#f0f0f0',
-        color: '#000',
-        border: '1px solid #ccc',
-        cursor: 'pointer',
-      }}
-      >
-      {ans.text || '(no text)'}
-      </button>
-      </li>
-    ))}
-    </ul>
-    <p style={{ marginTop: '1rem' }}>
-    {countdown > 0
-      ? `⏳ Time remaining: ${countdown} second${countdown === 1 ? '' : 's'}`
-      : '🕒 Waiting for next question...'}
+      {categoryName && (
+        <h3 style={{ marginBottom: 0 }}>Category: <span style={{ color: '#2a5d9f' }}>{categoryName}</span></h3>
+      )}
+      <h2 style={{ marginTop: categoryName ? 0 : undefined }}>{currentQuestion.text}</h2>
+      <ul style={{ listStyle: 'none', padding: 0 }}>
+        {answers.map((ans) => (
+          <li key={ans.id} style={{ marginBottom: '0.5rem' }}>
+            <button
+              onClick={() => handleAnswer(ans.id)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: selectedAnswerId === ans.id ? 'lightgreen' : '#f0f0f0',
+                color: '#000',
+                border: '1px solid #ccc',
+                cursor: 'pointer',
+              }}
+            >
+              {ans.text || '(no text)'}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p style={{ marginTop: '1rem' }}>
+        {countdown > 0
+          ? `⏳ Time remaining: ${countdown} second${countdown === 1 ? '' : 's'}`
+          : '🕒 Waiting for next question...'}
       </p>
-      </div>
+    </div>
   );
 }
 

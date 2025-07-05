@@ -1,5 +1,5 @@
 // backend/sockets/handlers.js
-import db from '../db.js';
+import db from '../db/db.js';
 import { getIO } from '../utils/socketInstance.js';
 
 const timers = new Map(); // Store timers per session
@@ -167,10 +167,14 @@ export default function socketHandlers() {
                         return;
                     }
 
-                    io.to(roomId).emit('new-question', { question, answers });
+                    // Fetch the category name for this question
+                    db.get('SELECT name FROM categories WHERE id = ?', [question.category_id], (err, catRow) => {
+                        const categoryName = catRow ? catRow.name : '';
+                        io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
 
-                    db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
-                        if (err) console.error('❌ Failed to update question index:', err);
+                        db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
+                            if (err) console.error('❌ Failed to update question index:', err);
+                        });
                     });
                 });
             });
