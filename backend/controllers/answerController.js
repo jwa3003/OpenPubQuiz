@@ -1,14 +1,14 @@
 // backend/controllers/answerController.js
-import db from '../db/db.js';
+const db = require('../db/db.js');
 
-export function getAnswersByQuestion(req, res) {
+function getAnswersByQuestion(req, res) {
   db.all('SELECT * FROM answers WHERE question_id = ?', [req.params.questionId], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json(rows);
   });
 }
 
-export function createAnswer(req, res) {
+function createAnswer(req, res) {
   const { question_id, text, is_correct = 0 } = req.body;
   if (!question_id || !text) return res.status(400).json({ error: 'Missing fields' });
 
@@ -18,7 +18,7 @@ export function createAnswer(req, res) {
   });
 }
 
-export function updateAnswer(req, res) {
+function updateAnswer(req, res) {
   const { text, is_correct } = req.body;
   const fields = [];
   const values = [];
@@ -42,9 +42,16 @@ export function updateAnswer(req, res) {
   });
 }
 
-export function deleteAnswer(req, res) {
+function deleteAnswer(req, res) {
   db.run('DELETE FROM answers WHERE id = ?', [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json({ success: true });
   });
 }
+
+module.exports = {
+  getAnswersByQuestion,
+  createAnswer,
+  updateAnswer,
+  deleteAnswer
+};

@@ -1,5 +1,7 @@
-// Delete a quiz and clean up sessions
-export function deleteQuiz(req, res) {
+const db = require('../db/db.js');
+const { randomId } = require('../utils/randomId.js');
+
+function deleteQuiz(req, res) {
   const { id } = req.params;
 
   // First, remove from sessions that reference it
@@ -22,18 +24,15 @@ export function deleteQuiz(req, res) {
     });
   });
 }
-// backend/controllers/quizController.js
-import db from '../db/db.js';
-import { nanoid } from 'nanoid';
 
-export function getAllQuizzes(req, res) {
+function getAllQuizzes(req, res) {
   db.all('SELECT id, name FROM quizzes ORDER BY name', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 }
 
-export function getQuizById(req, res) {
+function getQuizById(req, res) {
   const { id } = req.params;
   db.get('SELECT * FROM quizzes WHERE id = ?', [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -42,11 +41,11 @@ export function getQuizById(req, res) {
   });
 }
 
-export function createQuiz(req, res) {
+function createQuiz(req, res) {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Missing quiz name' });
 
-  const id = nanoid(6).toUpperCase();
+  const id = randomId(6).toUpperCase();
   db.run('INSERT INTO quizzes (id, name) VALUES (?, ?)', [id, name], function (err) {
     if (err) {
       console.error('❌ Error inserting quiz:', err.message);
@@ -55,3 +54,27 @@ export function createQuiz(req, res) {
     res.status(201).json({ id, name });
   });
 }
+
+function updateQuiz(req, res) {
+  const { id } = req.params;
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Missing quiz name' });
+  db.run('UPDATE quizzes SET name = ? WHERE id = ?', [name, id], function (err) {
+    if (err) {
+      console.error('❌ Error updating quiz:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+    res.json({ success: true });
+  });
+}
+
+module.exports = {
+  getAllQuizzes,
+  getQuizById,
+  createQuiz,
+  deleteQuiz,
+  updateQuiz
+};

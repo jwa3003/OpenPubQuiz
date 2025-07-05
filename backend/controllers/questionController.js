@@ -1,14 +1,14 @@
 // backend/controllers/questionController.js
-import db from '../db/db.js';
+const db = require('../db/db.js');
 
-export function getQuestionsByQuiz(req, res) {
+function getQuestionsByQuiz(req, res) {
   db.all('SELECT * FROM questions WHERE quiz_id = ?', [req.params.quizId], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json(rows);
   });
 }
 
-export function createQuestion(req, res) {
+function createQuestion(req, res) {
   const { quiz_id, text, category_id } = req.body;
   console.log('createQuestion called with:', req.body);
   if (!quiz_id || !text || !category_id) {
@@ -24,7 +24,7 @@ export function createQuestion(req, res) {
   });
 }
 
-export function updateQuestion(req, res) {
+function updateQuestion(req, res) {
   const { text } = req.body;
   db.run('UPDATE questions SET text = ? WHERE id = ?', [text, req.params.id], function (err) {
     if (err) return res.status(500).json({ error: 'Database error' });
@@ -32,9 +32,16 @@ export function updateQuestion(req, res) {
   });
 }
 
-export function deleteQuestion(req, res) {
+function deleteQuestion(req, res) {
   db.run('DELETE FROM questions WHERE id = ?', [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json({ success: true });
   });
 }
+
+module.exports = {
+  getQuestionsByQuiz,
+  createQuestion,
+  updateQuestion,
+  deleteQuestion
+};

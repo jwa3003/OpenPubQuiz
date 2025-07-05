@@ -1,7 +1,7 @@
 // backend/controllers/categoryController.js
-import db from '../db/db.js';
+const db = require('../db/db.js');
 
-export function getCategoriesByQuiz(req, res) {
+function getCategoriesByQuiz(req, res) {
   const { quizId } = req.params;
   db.all('SELECT * FROM categories WHERE quiz_id = ?', [quizId], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
@@ -9,7 +9,7 @@ export function getCategoriesByQuiz(req, res) {
   });
 }
 
-export function createCategory(req, res) {
+function createCategory(req, res) {
   const { quiz_id, name } = req.body;
   console.log('createCategory called with:', req.body);
   if (!quiz_id || !name) {
@@ -25,9 +25,32 @@ export function createCategory(req, res) {
   });
 }
 
-export function deleteCategory(req, res) {
+function deleteCategory(req, res) {
   db.run('DELETE FROM categories WHERE id = ?', [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json({ success: true });
   });
 }
+
+function updateCategory(req, res) {
+  const { id } = req.params;
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Missing category name' });
+  db.run('UPDATE categories SET name = ? WHERE id = ?', [name, id], function (err) {
+    if (err) {
+      console.error('❌ Error updating category:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json({ success: true });
+  });
+}
+
+module.exports = {
+  getCategoriesByQuiz,
+  createCategory,
+  deleteCategory,
+  updateCategory
+};

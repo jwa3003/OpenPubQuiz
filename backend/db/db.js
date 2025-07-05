@@ -1,5 +1,5 @@
 // backend/db/db.js
-import sqlite3 from 'sqlite3';
+const sqlite3 = require('sqlite3');
 
 const db = new sqlite3.Database('./quiz.db', (err) => {
   if (err) console.error('❌ Failed to connect to database:', err.message);
@@ -59,6 +59,16 @@ db.serialize(() => {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS quiz_sessions_teams (
+      session_id TEXT NOT NULL,
+      team_id TEXT NOT NULL,
+      team_name TEXT,
+      PRIMARY KEY (session_id, team_id),
+      FOREIGN KEY (session_id) REFERENCES quiz_sessions(session_id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS teams_double_category (
       session_id TEXT NOT NULL,
       team_id TEXT NOT NULL,
@@ -70,4 +80,4 @@ db.serialize(() => {
   `);
 });
 
-export default db;
+module.exports = db;

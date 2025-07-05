@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
 import QuizBuilder from '../quiz/QuizBuilder';
 import HostQuiz from './HostQuiz';
@@ -6,15 +7,40 @@ import HostQuiz from './HostQuiz';
 const API_BASE = `http://${window.location.hostname}:3001`;
 
 function HostDashboard({ sessionId, quizId, quizName, onBack }) {
+  const [allTeamsSelectedDouble, setAllTeamsSelectedDouble] = useState(false);
+  const pollIntervalRef = useRef(null);
   const [teams, setTeams] = useState([]);
   const [localQuizId, setLocalQuizId] = useState(quizId);
   const [localQuizName, setLocalQuizName] = useState(quizName);
   const [isCreatingQuiz, setIsCreatingQuiz] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
-
   const [quizzes, setQuizzes] = useState([]);
   const [showQuizSelector, setShowQuizSelector] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState('');
+  // For edit mode
+  const [editingQuizData, setEditingQuizData] = useState(null);
+
+  // Poll double-category status
+  useEffect(() => {
+    if (!sessionId || quizStarted) return;
+    const pollStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/double-category/status?session_id=${sessionId}`);
+        if (!res.ok) throw new Error('Failed to fetch double-category status');
+        const data = await res.json();
+        // All teams must have selected
+        setAllTeamsSelectedDouble(
+          data.allTeamIds && data.allTeamIds.length > 0 &&
+          data.notSelectedTeamIds && data.notSelectedTeamIds.length === 0
+        );
+      } catch (err) {
+        setAllTeamsSelectedDouble(false);
+      }
+    };
+    pollStatus();
+    pollIntervalRef.current = setInterval(pollStatus, 2000);
+    return () => clearInterval(pollIntervalRef.current);
+  }, [sessionId, quizStarted]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -145,20 +171,53 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       />
     ) : (
       <>
-      {localQuizName ? (
+      {localQuizName && !isCreatingQuiz ? (
         <>
         <p>
         <strong>Quiz Name:</strong> {localQuizName}
         </p>
-        <button onClick={handleStartQuiz} disabled={quizStarted} style={{ marginRight: '1rem' }}>
-        ▶️ Start Quiz
+        <button
+          onClick={handleStartQuiz}
+          disabled={quizStarted || !allTeamsSelectedDouble}
+          style={{ marginRight: '1rem' }}
+          title={allTeamsSelectedDouble ? '' : 'All teams must select a double-points category'}
+        >
+          ▶️ Start Quiz
+        </button>
+        <button
+          onClick={async () => {
+            // Fetch full quiz data and open QuizBuilder in edit mode
+            try {
+              const res = await fetch(`${API_BASE}/api/quiz/${localQuizId}/full`);
+              if (!res.ok) throw new Error('Failed to fetch quiz data');
+              const data = await res.json();
+              setEditingQuizData(data);
+              setIsCreatingQuiz(true);
+            } catch (err) {
+              alert('Failed to load quiz for editing: ' + err.message);
+            }
+          }}
+          disabled={quizStarted}
+          style={{ marginRight: '1rem' }}
+        >
+          ✏️ Edit Quiz
         </button>
         <button onClick={handleDeleteQuiz} disabled={quizStarted}>
         🗑️ Delete Quiz
         </button>
+        {!allTeamsSelectedDouble && (
+          <div style={{ color: 'red', marginTop: 4 }}>
+            All teams must select a double-points category before starting.
+          </div>
+        )}
         </>
       ) : isCreatingQuiz ? (
-        <QuizBuilder onQuizCreated={onQuizCreated} onCancel={() => setIsCreatingQuiz(false)} />
+        <QuizBuilder
+          onQuizCreated={onQuizCreated}
+          onCancel={() => { setIsCreatingQuiz(false); setEditingQuizData(null); }}
+          initialQuizData={editingQuizData}
+          editMode={!!editingQuizData}
+        />
       ) : showQuizSelector ? (
         <>
         <p><strong>Select a Quiz:</strong></p>

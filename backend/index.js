@@ -1,20 +1,20 @@
 // backend/index.js
-import express from 'express';
-import cors from 'cors';
-import { Server } from 'socket.io';
-import http from 'http';
 
-import db from './db/db.js';
-import socketHandlers from './sockets/handlers.js';
-import { setIO } from './utils/socketInstance.js';
+const express = require('express');
+const cors = require('cors');
+const { Server } = require('socket.io');
+const http = require('http');
 
+const db = require('./db/db.js');
+const socketHandlers = require('./sockets/handlers.js');
+const { setIO } = require('./utils/socketInstance.js');
 
-import quizRoutes from './routes/quiz.js';
-import questionRoutes from './routes/question.js';
-import answerRoutes from './routes/answer.js';
-import sessionRoutes from './routes/session.js';
-import categoryRoutes from './routes/category.js';
-import fullQuizRoutes from './routes/fullQuiz.js';
+const quizRoutes = require('./routes/quiz.js');
+const questionRoutes = require('./routes/question.js');
+const answerRoutes = require('./routes/answer.js');
+const sessionRoutes = require('./routes/session.js');
+const categoryRoutes = require('./routes/category.js');
+const fullQuizRoutes = require('./routes/fullQuiz.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -39,9 +39,12 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/sessions', sessionRoutes);
 
-import doubleCategoryRoutes from './routes/doubleCategory.js';
+
+const doubleCategoryRoutes = require('./routes/doubleCategory.js');
+const doubleCategoryStatusRoutes = require('./routes/doubleCategoryStatus.js');
 app.use('/api/categories', categoryRoutes);
 app.use('/api/double-category', doubleCategoryRoutes);
+app.use('/api/double-category', doubleCategoryStatusRoutes);
 app.use('/api/quiz', fullQuizRoutes); // /api/quiz/:quizId/full
 
 const PORT = 3001;
@@ -51,13 +54,15 @@ server.listen(PORT, HOST, () => {
   console.log(`🚀 Server running on:`);
   console.log(`   • http://localhost:${PORT}`);
 
-  import('os').then(os => {
+  // Print all local network IPv4 addresses
+  try {
+    const os = require('os');
     const interfaces = os.networkInterfaces();
     Object.values(interfaces)
-    .flat()
-    .filter(iface => iface.family === 'IPv4' && !iface.internal)
-    .forEach(iface => {
-      console.log(`   • http://${iface.address}:${PORT}`);
-    });
-  });
+      .flat()
+      .filter(iface => iface.family === 'IPv4' && !iface.internal)
+      .forEach(iface => {
+        console.log(`   • http://${iface.address}:${PORT}`);
+      });
+  } catch (e) {}
 });

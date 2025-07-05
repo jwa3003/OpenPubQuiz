@@ -2,9 +2,20 @@ import { useState } from 'react';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
-function QuizBuilder({ onQuizCreated, onCancel }) {
-    const [quizName, setQuizName] = useState('');
-    const [categories, setCategories] = useState([]); // {name: '', questions: [{text, answers: [{text, is_correct}]}]}
+function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode = false }) {
+    // If editing, initialize state from initialQuizData
+    const [quizName, setQuizName] = useState(initialQuizData?.quiz?.name || '');
+    const [categories, setCategories] = useState(
+        initialQuizData?.categories
+            ? initialQuizData.categories.map(cat => ({
+                name: cat.name,
+                questions: (cat.questions || []).map(q => ({
+                    text: q.text,
+                    answers: (q.answers || []).map(a => ({ text: a.text, is_correct: !!a.is_correct }))
+                }))
+            }))
+            : []
+    );
 
     const addCategory = () => {
         setCategories([...categories, { name: '', questions: [] }]);
@@ -96,58 +107,110 @@ function QuizBuilder({ onQuizCreated, onCancel }) {
         }
 
         try {
-            const quizRes = await fetch(`${API_BASE}/api/quiz`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: quizName }),
-            });
-            if (!quizRes.ok) throw new Error('Failed to create quiz');
-            const quizData = await quizRes.json();
-            console.log('Quiz creation response:', quizData);
-
-            // Create categories and map their indices to IDs
-            const categoryIds = [];
-            for (const cat of categories) {
-                console.log('Creating category:', cat.name, 'with quiz_id:', quizData.id);
-                const catRes = await fetch(`${API_BASE}/api/categories`, {
+            let quizId;
+            if (editMode && initialQuizData?.quiz?.id) {
+                // Update quiz name
+                const quizRes = await fetch(`${API_BASE}/api/quiz/${initialQuizData.quiz.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: quizName }),
+                });
+                if (!quizRes.ok) throw new Error('Failed to update quiz');
+                quizId = initialQuizData.quiz.id;
+            } else {
+                // Create new quiz
+                const quizRes = await fetch(`${API_BASE}/api/quiz`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quiz_id: quizData.id, name: cat.name }),
+                    body: JSON.stringify({ name: quizName }),
                 });
-                if (!catRes.ok) {
-                  const errText = await catRes.text();
-                  console.error('Category creation failed:', errText);
-                  throw new Error('Failed to create category');
-                }
-                const catData = await catRes.json();
-                categoryIds.push(catData.id);
+                if (!quizRes.ok) throw new Error('Failed to create quiz');
+                const quizData = await quizRes.json();
+                quizId = quizData.id;
             }
 
+            // Categories
+            const categoryIds = [];
             for (let cIndex = 0; cIndex < categories.length; ++cIndex) {
                 const cat = categories[cIndex];
-                const category_id = categoryIds[cIndex];
-                for (const q of cat.questions) {
-                    const questionRes = await fetch(`${API_BASE}/api/questions`, {
+                let categoryId;
+                if (editMode && initialQuizData?.categories?.[cIndex]?.id) {
+                    // Update category
+                    const catRes = await fetch(`${API_BASE}/api/categories/${initialQuizData.categories[cIndex].id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: cat.name }),
+                    });
+                    if (!catRes.ok) throw new Error('Failed to update category');
+                    categoryId = initialQuizData.categories[cIndex].id;
+                } else {
+                    // Create new category
+                    const catRes = await fetch(`${API_BASE}/api/categories`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quiz_id: quizData.id, text: q.text, category_id }),
+                        body: JSON.stringify({ quiz_id: quizId, name: cat.name }),
                     });
-                    if (!questionRes.ok) throw new Error('Failed to create question');
-                    const questionData = await questionRes.json();
+                    if (!catRes.ok) throw new Error('Failed to create category');
+                    const catData = await catRes.json();
+                    categoryId = catData.id;
+                }
+                categoryIds.push(categoryId);
+            }
 
-                    for (const a of q.answers) {
-                        if (!a.text.trim()) continue;
-                        const answerRes = await fetch(`${API_BASE}/api/answers`, {
+            // Questions and Answers
+            for (let cIndex = 0; cIndex < categories.length; ++cIndex) {
+                const cat = categories[cIndex];
+                const categoryId = categoryIds[cIndex];
+                for (let qIndex = 0; qIndex < cat.questions.length; ++qIndex) {
+                    const q = cat.questions[qIndex];
+                    let questionId;
+                    if (editMode && initialQuizData?.categories?.[cIndex]?.questions?.[qIndex]?.id) {
+                        // Update question
+                        const questionRes = await fetch(`${API_BASE}/api/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: q.text }),
+                        });
+                        if (!questionRes.ok) throw new Error('Failed to update question');
+                        questionId = initialQuizData.categories[cIndex].questions[qIndex].id;
+                    } else {
+                        // Create new question
+                        const questionRes = await fetch(`${API_BASE}/api/questions`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ question_id: questionData.id, text: a.text, is_correct: a.is_correct }),
+                            body: JSON.stringify({ quiz_id: quizId, text: q.text, category_id: categoryId }),
                         });
-                        if (!answerRes.ok) throw new Error('Failed to create answer');
+                        if (!questionRes.ok) throw new Error('Failed to create question');
+                        const questionData = await questionRes.json();
+                        questionId = questionData.id;
+                    }
+
+                    // Answers
+                    for (let aIndex = 0; aIndex < q.answers.length; ++aIndex) {
+                        const a = q.answers[aIndex];
+                        if (!a.text.trim()) continue;
+                        if (editMode && initialQuizData?.categories?.[cIndex]?.questions?.[qIndex]?.answers?.[aIndex]?.id) {
+                            // Update answer
+                            const answerRes = await fetch(`${API_BASE}/api/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: a.text, is_correct: a.is_correct }),
+                            });
+                            if (!answerRes.ok) throw new Error('Failed to update answer');
+                        } else {
+                            // Create new answer
+                            const answerRes = await fetch(`${API_BASE}/api/answers`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct }),
+                            });
+                            if (!answerRes.ok) throw new Error('Failed to create answer');
+                        }
                     }
                 }
             }
 
-            onQuizCreated(quizData.id, quizName);
+            onQuizCreated(quizId, quizName);
         } catch (err) {
             console.error(err);
             alert(err.message);

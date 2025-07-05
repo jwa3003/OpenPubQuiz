@@ -1,10 +1,10 @@
 // backend/routes/doubleCategory.js
-import express from 'express';
-import { setDoubleCategory, getDoubleCategory } from '../controllers/doubleCategoryController.js';
+const express = require('express');
+const { setDoubleCategory, getDoubleCategory } = require('../controllers/doubleCategoryController.js');
 
 const router = express.Router();
 
 router.post('/', setDoubleCategory);
 router.get('/', getDoubleCategory);
 
-export default router;
+module.exports = router;

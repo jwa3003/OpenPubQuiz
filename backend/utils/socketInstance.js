@@ -7,7 +7,8 @@ let io = null;
  * This should be called once in index.js after creating the server.
  * @param {import('socket.io').Server} ioInstance
  */
-export function setIO(ioInstance) {
+
+function setIO(ioInstance) {
     io = ioInstance;
 }
 
@@ -16,9 +17,12 @@ export function setIO(ioInstance) {
  * Call this anywhere you need access to the live Socket.IO server.
  * @returns {import('socket.io').Server}
  */
-export function getIO() {
+
+function getIO() {
     if (!io) {
         throw new Error('Socket.IO instance has not been set. Make sure to call setIO() in index.js first.');
     }
     return io;
 }
+
+module.exports = { setIO, getIO };

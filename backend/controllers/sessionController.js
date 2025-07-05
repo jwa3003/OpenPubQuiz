@@ -1,13 +1,13 @@
 // backend/controllers/sessionController.js
-import db from '../db/db.js';
-import { nanoid } from 'nanoid';
-import { getIO } from '../utils/socketInstance.js';
+const db = require('../db/db.js');
+const { randomId } = require('../utils/randomId.js');
+const { getIO } = require('../utils/socketInstance.js');
 
-export function createSession(req, res) {
+function createSession(req, res) {
     let { session_id, quiz_id = null } = req.body;
 
     if (!session_id) {
-        session_id = nanoid(4).toUpperCase(); // 4-char code
+        session_id = randomId(4).toUpperCase(); // 4-char code
     }
 
     const insertSession = () => {
@@ -32,7 +32,7 @@ export function createSession(req, res) {
     }
 }
 
-export function getSessionById(req, res) {
+function getSessionById(req, res) {
     const { session_id } = req.params;
     const query = `
     SELECT qs.session_id, qs.quiz_id, q.name as quiz_name
@@ -50,7 +50,7 @@ export function getSessionById(req, res) {
     });
 }
 
-export function updateSession(req, res) {
+function updateSession(req, res) {
     const { session_id } = req.params;
     const { quiz_id, status } = req.body;
 
@@ -97,7 +97,7 @@ export function updateSession(req, res) {
     });
 }
 
-export function removeQuizFromSession(req, res) {
+function removeQuizFromSession(req, res) {
     const { session_id } = req.params;
     const sql = 'UPDATE quiz_sessions SET quiz_id = NULL WHERE session_id = ?';
     db.run(sql, [session_id], function (err) {
@@ -111,3 +111,10 @@ export function removeQuizFromSession(req, res) {
         res.json({ success: true, message: 'Quiz removed from session' });
     });
 }
+
+module.exports = {
+    createSession,
+    getSessionById,
+    updateSession,
+    removeQuizFromSession
+};

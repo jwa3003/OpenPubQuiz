@@ -1,8 +1,8 @@
 // backend/controllers/fullQuizController.js
-import db from '../db/db.js';
+const db = require('../db/db.js');
 
 // Returns quiz info, categories, questions, and answers for a quiz
-export function getFullQuizById(req, res) {
+function getFullQuizById(req, res) {
   const { quizId } = req.params;
   db.get('SELECT * FROM quizzes WHERE id = ?', [quizId], (err, quiz) => {
     if (err || !quiz) return res.status(404).json({ error: 'Quiz not found' });
@@ -49,3 +49,7 @@ export function getFullQuizById(req, res) {
     });
   });
 }
+
+module.exports = {
+  getFullQuizById
+};

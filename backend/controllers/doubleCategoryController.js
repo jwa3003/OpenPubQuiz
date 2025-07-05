@@ -1,8 +1,8 @@
 // backend/controllers/doubleCategoryController.js
-import db from '../db/db.js';
+const db = require('../db/db.js');
 
 // Set or update a team's double-points category for a session
-export function setDoubleCategory(req, res) {
+function setDoubleCategory(req, res) {
   const { session_id, team_id, category_id } = req.body;
   if (!session_id || !team_id || !category_id) {
     return res.status(400).json({ error: 'Missing session_id, team_id, or category_id' });
@@ -20,7 +20,7 @@ export function setDoubleCategory(req, res) {
 }
 
 // Get a team's double-points category for a session
-export function getDoubleCategory(req, res) {
+function getDoubleCategory(req, res) {
   const { session_id, team_id } = req.query;
   if (!session_id || !team_id) {
     return res.status(400).json({ error: 'Missing session_id or team_id' });
@@ -34,3 +34,8 @@ export function getDoubleCategory(req, res) {
     }
   );
 }
+
+module.exports = {
+  setDoubleCategory,
+  getDoubleCategory
+};

@@ -1,12 +1,14 @@
 // backend/sockets/handlers.js
-import db from '../db/db.js';
-import { getIO } from '../utils/socketInstance.js';
+
+const db = require('../db/db.js');
+const { getIO } = require('../utils/socketInstance.js');
 
 const timers = new Map(); // Store timers per session
 const scores = new Map(); // Map<sessionId, Map<socketId, score>>
 const teamNames = new Map(); // Map<socketId, teamName>
 
-export default function socketHandlers() {
+function socketHandlers() {
+module.exports = socketHandlers;
     const io = getIO();
 
     // Track which teams have answered for the current question (shared across all sockets)
@@ -35,8 +37,13 @@ export default function socketHandlers() {
 
                 if (role === 'player' && teamName) {
                     io.to(roomId).emit('teamJoined', { id: socket.id, name: userName, role });
-
                     teamNames.set(socket.id, teamName);
+
+                    // Insert team into quiz_sessions_teams if not already present
+                    db.run(
+                        `INSERT OR IGNORE INTO quiz_sessions_teams (session_id, team_id, team_name) VALUES (?, ?, ?)`,
+                        [sessionId, socket.id, teamName]
+                    );
 
                     if (!scores.has(sessionId)) scores.set(sessionId, new Map());
                     if (!scores.get(sessionId).has(socket.id)) scores.get(sessionId).set(socket.id, 0);
@@ -286,3 +293,5 @@ export default function socketHandlers() {
         timers.set(sessionId, timer);
     }
 }
+
+module.exports = socketHandlers;
