@@ -1,9 +1,14 @@
+
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
+import DoubleCategorySelector from './DoubleCategorySelector.jsx';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
+  // Double-points category selection
+  const [doubleCategoryId, setDoubleCategoryId] = useState(null);
+  const [doubleCategoryConfirmed, setDoubleCategoryConfirmed] = useState(false);
   // Try to load persisted state
   const persisted = (() => {
     try {
@@ -72,17 +77,20 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       resetForNewQuestion();
     };
 
+    // Track previous question and answer
     const onNewQuestion = ({ question, answers }) => {
       console.log('[PlayQuiz] New question received:', question);
-      if (prevQuestionRef.current) {
-        submitAnswerForQuestion(prevQuestionRef.current);
+      // Submit the answer for the previous question, if any
+      if (prevQuestionRef.current && prevQuestionRef.current.id && prevQuestionRef.current.selectedAnswerId !== undefined) {
+        submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
       }
       setCurrentQuestion(question);
       setAnswers(answers);
       setSelectedAnswerId(null);
       setShowResults(false);
       setCountdown(0);
-      prevQuestionRef.current = question;
+      // Store the new question and clear selectedAnswerId
+      prevQuestionRef.current = { ...question, selectedAnswerId: null };
       countdownRunningRef.current = false;
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
@@ -113,8 +121,19 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
     const onQuizLoaded = ({ quizId: newQuizId, quizName }) => {
       console.log(`[PlayQuiz] Quiz loaded dynamically: ${quizName}`);
-      setQuiz({ id: newQuizId, name: quizName });
-      setLoading(false);
+      // Always fetch full quiz data so categories are present
+      setLoading(true);
+      fetch(`${API_BASE}/api/quiz/${newQuizId}/full`)
+        .then((res) => (res.ok ? res.json() : Promise.reject()))
+        .then((quizData) => {
+          console.log('[PlayQuiz] Loaded quiz data (from socket):', quizData);
+          setQuiz(quizData);
+          setLoading(false);
+        })
+        .catch(() => {
+          setQuiz({ id: newQuizId, name: quizName });
+          setLoading(false);
+        });
       quizLoadedFromSocket = true;
     };
 
@@ -130,6 +149,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       fetch(`${API_BASE}/api/quiz/${quizId}/full`)
         .then((res) => (res.ok ? res.json() : Promise.reject()))
         .then((quizData) => {
+          console.log('[PlayQuiz] Loaded quiz data:', quizData);
           // Only set if not already set by socket event
           if (!quizLoadedFromSocket) setQuiz(quizData);
           setLoading(false);
@@ -156,25 +176,25 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     };
   }, [sessionId, quizId, currentQuestion, selectedAnswerId, quiz]);
 
-  const submitAnswerForQuestion = (question) => {
+  // Accept answerId as argument for correct timing
+  const submitAnswerForQuestion = (question, answerId) => {
     if (!question) {
       console.log('[PlayQuiz] No question provided for submit, skipping.');
       return;
     }
-
-    const answerIdToSubmit = selectedAnswerId !== null ? selectedAnswerId : null;
-
+    const answerIdToSubmit = answerId !== undefined ? answerId : selectedAnswerId;
+    // Support both { id, ... } and { quiz: { id, ... }, categories: [...] }
+    const quizIdToUse = quiz?.id || quiz?.quiz?.id;
     console.log('[PlayQuiz] Submitting answer for question:', question.id, {
       sessionId,
-      quizId: quiz?.id,
+      quizId: quizIdToUse,
       questionId: question.id,
       answerId: answerIdToSubmit,
       teamId: socket.id,
     });
-
     socket.emit('submitAnswer', {
       sessionId,
-      quizId: quiz?.id,
+      quizId: quizIdToUse,
       questionId: question.id,
       answerId: answerIdToSubmit,
       teamId: socket.id,
@@ -184,6 +204,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const handleAnswer = (answerId) => {
     console.log('[PlayQuiz] Answer selected:', answerId);
     setSelectedAnswerId(answerId);
+    // Store the answer with the previous question for submission
+    if (prevQuestionRef.current) {
+      prevQuestionRef.current.selectedAnswerId = answerId;
+    }
     socket.emit('answer-selected', {
       sessionId,
       teamId: socket.id,
@@ -197,25 +221,24 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (loading) return <p>Loading quiz info...</p>;
   if (!quiz) return <p>Waiting for quiz to be selected...</p>;
 
-  // If quiz has categories, show them (for debug/demo)
+  // Show double-points selector as a floating option any time after quiz is loaded and before quiz starts
+  const showDoubleCategorySelector = quiz.categories && quiz.categories.length > 0 && !quizStarted;
+
   if (quiz.categories && quiz.categories.length > 0 && !quizStarted) {
     return (
       <div>
         <h2>Quiz Lobby</h2>
-        <h3>Welcome, <strong>{teamName}</strong>!</h3>
-        <h4>Categories:</h4>
-        <ul>
-          {quiz.categories.map((cat) => (
-            <li key={cat.id}>
-              <strong>{cat.name}</strong>
-              <ul>
-                {cat.questions && cat.questions.length > 0 ? cat.questions.map((q) => (
-                  <li key={q.id}>{q.text} ({q.answers.length} answers)</li>
-                )) : <li>No questions</li>}
-              </ul>
-            </li>
-          ))}
-        </ul>
+        <h3>Welcome Team, <strong>{teamName}</strong>!</h3>
+        {/* Categories list removed; categories are visible in the dropdown below */}
+        <DoubleCategorySelector
+          quiz={quiz}
+          sessionId={sessionId}
+          doubleCategoryId={doubleCategoryId}
+          setDoubleCategoryId={setDoubleCategoryId}
+          doubleCategoryConfirmed={doubleCategoryConfirmed}
+          setDoubleCategoryConfirmed={setDoubleCategoryConfirmed}
+          floating={false}
+        />
         <p>⏳ Waiting for the host to start the quiz...</p>
         <button onClick={() => {
           try { localStorage.removeItem('playQuizState'); } catch {}
@@ -226,6 +249,11 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   }
 
   if (showResults) {
+    // Submit the last answer if needed
+    if (prevQuestionRef.current && prevQuestionRef.current.id && prevQuestionRef.current.selectedAnswerId !== undefined) {
+      submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
+      prevQuestionRef.current = {};
+    }
     return (
       <div>
       <h2>🏁 Quiz Ended!</h2>

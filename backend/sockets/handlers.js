@@ -77,29 +77,39 @@ export default function socketHandlers() {
             const roomId = `session-${sessionId}`;
             io.to(roomId).emit('team-answered', { teamId });
 
-            db.get('SELECT is_correct FROM answers WHERE id = ?', [answerId], (err, answer) => {
-                if (err || !answer) return;
+            // Need to get the question's category_id for double-points logic
+            db.get('SELECT q.category_id, a.is_correct FROM questions q JOIN answers a ON a.question_id = q.id WHERE a.id = ?', [answerId], (err, row) => {
+                if (err || !row) return;
 
-                if (answer.is_correct) {
-                    console.log(`✅ Correct answer from ${teamNames.get(teamId)}!`);
+                // is_correct may be 0/1 as integer, so check with == 1
+                if (row.is_correct == 1) {
+                    // Check if this team has selected this category for double points
+                    db.get('SELECT category_id FROM teams_double_category WHERE session_id = ? AND team_id = ?', [sessionId, teamId], (err, doubleRow) => {
+                        let points = 1;
+                        if (!err && doubleRow && Number(doubleRow.category_id) === Number(row.category_id)) {
+                            points = 2;
+                        }
 
-                    if (!scores.has(sessionId)) scores.set(sessionId, new Map());
+                        console.log(`✅ Correct answer from ${teamNames.get(teamId)}! (${points} point${points > 1 ? 's' : ''})`);
 
-                    const sessionScores = scores.get(sessionId);
-                    const prev = sessionScores.get(teamId) || 0;
-                    sessionScores.set(teamId, prev + 1);
+                        if (!scores.has(sessionId)) scores.set(sessionId, new Map());
 
-                    console.log(`🎯 ${teamNames.get(teamId)} now has ${prev + 1} point(s)`);
+                        const sessionScores = scores.get(sessionId);
+                        const prev = sessionScores.get(teamId) || 0;
+                        sessionScores.set(teamId, prev + points);
 
-                    // Emit live leaderboard update
-                    const partialLeaderboard = Array.from(sessionScores.entries())
-                    .map(([id, score]) => ({
-                        teamName: teamNames.get(id) || 'Unknown',
-                                           score,
-                    }))
-                    .sort((a, b) => b.score - a.score);
+                        console.log(`🎯 ${teamNames.get(teamId)} now has ${prev + points} point(s)`);
 
-                    io.to(roomId).emit('score-update', partialLeaderboard);
+                        // Emit live leaderboard update
+                        const partialLeaderboard = Array.from(sessionScores.entries())
+                        .map(([id, score]) => ({
+                            teamName: teamNames.get(id) || 'Unknown',
+                            score,
+                        }))
+                        .sort((a, b) => b.score - a.score);
+
+                        io.to(roomId).emit('score-update', partialLeaderboard);
+                    });
                 } else {
                     console.log(`❌ Incorrect answer from ${teamNames.get(teamId)}`);
                 }

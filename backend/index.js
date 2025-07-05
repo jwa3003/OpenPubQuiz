@@ -38,7 +38,10 @@ app.use('/api/quiz', quizRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/sessions', sessionRoutes);
+
+import doubleCategoryRoutes from './routes/doubleCategory.js';
 app.use('/api/categories', categoryRoutes);
+app.use('/api/double-category', doubleCategoryRoutes);
 app.use('/api/quiz', fullQuizRoutes); // /api/quiz/:quizId/full
 
 const PORT = 3001;
