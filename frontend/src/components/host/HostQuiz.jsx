@@ -6,6 +6,8 @@ import socket from '../../socket';
 
 
 function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
+    const [showCategoryTitle, setShowCategoryTitle] = useState(false);
+    const [categoryTitle, setCategoryTitle] = useState('');
     const [currentQuestion, setCurrentQuestion] = useState(null);
     const [answers, setAnswers] = useState([]);
     const [selectedTeams, setSelectedTeams] = useState(new Set());
@@ -16,6 +18,12 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
 
     useEffect(() => {
         if (!sessionId) return;
+
+        socket.on('category-title', ({ categoryName }) => {
+            setCategoryTitle(categoryName);
+            setShowCategoryTitle(true);
+            setTimeout(() => setShowCategoryTitle(false), 5000);
+        });
 
         socket.on('new-question', ({ question, answers }) => {
             setCurrentQuestion(question);
@@ -95,6 +103,35 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         return `${rank}${suffixText}`;
     };
 
+    if (showCategoryTitle) {
+        return (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 1000,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(135deg, #181c24 0%, #232a36 100%)', color: '#fff',
+                fontSize: '2.5rem', fontWeight: 700, letterSpacing: 1
+            }}>
+                <div style={{ fontSize: '1.2rem', opacity: 0.7, marginBottom: 8 }}>Category</div>
+                <div style={{
+                    fontWeight: 900,
+                    fontSize: '2.7rem',
+                    marginTop: 12,
+                    textShadow: '0 2px 16px #000a',
+                    textAlign: 'center',
+                    width: '90vw',
+                    maxWidth: 500,
+                    wordBreak: 'break-word',
+                    lineHeight: 1.15,
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}>{categoryTitle}</div>
+            </div>
+        );
+    }
     if (quizEnded) {
         return (
             <div>

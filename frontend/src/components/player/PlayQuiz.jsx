@@ -6,6 +6,8 @@ import DoubleCategorySelector from './DoubleCategorySelector.jsx';
 const API_BASE = `http://${window.location.hostname}:3001`;
 
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
+  const [showCategoryTitle, setShowCategoryTitle] = useState(false);
+  const [categoryTitle, setCategoryTitle] = useState('');
   // Double-points category selection
   const [doubleCategoryId, setDoubleCategoryId] = useState(null);
   const [doubleCategoryConfirmed, setDoubleCategoryConfirmed] = useState(false);
@@ -142,6 +144,11 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     socket.on('countdown', onCountdown);
     socket.on('quiz-ended', onQuizEnded);
     socket.on('quiz-loaded', onQuizLoaded);
+    socket.on('category-title', ({ categoryName }) => {
+      setCategoryTitle(categoryName);
+      setShowCategoryTitle(true);
+      setTimeout(() => setShowCategoryTitle(false), 5000);
+    });
 
     // Only fetch if quiz is not already set by socket event
     if (quizId && !quiz) {
@@ -218,6 +225,35 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     setSelectedAnswerId(null);
   };
 
+  if (showCategoryTitle) {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 1000,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, #181c24 0%, #232a36 100%)', color: '#fff',
+        fontSize: '2.5rem', fontWeight: 700, letterSpacing: 1
+      }}>
+        <div style={{ fontSize: '1.2rem', opacity: 0.7, marginBottom: 8 }}>Category</div>
+        <div style={{
+          fontWeight: 900,
+          fontSize: '2.7rem',
+          marginTop: 12,
+          textShadow: '0 2px 16px #000a',
+          textAlign: 'center',
+          width: '90vw',
+          maxWidth: 500,
+          wordBreak: 'break-word',
+          lineHeight: 1.15,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>{categoryTitle}</div>
+      </div>
+    );
+  }
   if (loading) return <p>Loading quiz info...</p>;
   if (!quiz) return <p>Waiting for quiz to be selected...</p>;
 

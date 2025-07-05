@@ -7,12 +7,15 @@ const timers = new Map(); // Store timers per session
 const scores = new Map(); // Map<sessionId, Map<socketId, score>>
 const teamNames = new Map(); // Map<socketId, teamName>
 
-function socketHandlers() {
-module.exports = socketHandlers;
-    const io = getIO();
 
-    // Track which teams have answered for the current question (shared across all sockets)
-    const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
+// Track which teams have selected an answer for the current question (shared across all sockets)
+const selectedTeamsMap = new Map(); // Map<sessionId, Set<teamId>>
+// Track which teams have answered for the current question (shared across all sockets)
+const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
+
+function socketHandlers() {
+    module.exports = socketHandlers;
+    const io = getIO();
 
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
@@ -72,9 +75,7 @@ module.exports = socketHandlers;
             startCountdown(sessionId);
         });
 
-        // Track which teams have selected an answer for the current question
-        // and auto-start timer when all have selected
-        const selectedTeamsMap = new Map(); // Map<sessionId, Set<teamId>>
+        // Track which teams have selected an answer for the current question (for UI and auto-timer)
         socket.on('answer-selected', ({ sessionId, teamId }) => {
             if (!sessionId || !teamId) return;
             const roomId = `session-${sessionId}`;
@@ -82,7 +83,7 @@ module.exports = socketHandlers;
             selectedTeamsMap.get(sessionId).add(teamId);
             io.to(roomId).emit('team-selected', { teamId });
 
-            // Check if all teams have selected
+            // Auto-timer: check if all teams have selected
             const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
             const playerIds = clients.filter(id => teamNames.has(id));
             const selected = selectedTeamsMap.get(sessionId);
@@ -94,8 +95,7 @@ module.exports = socketHandlers;
             }
         });
 
-        // Track which teams have answered for the current question
-        const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
+
 
         socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, teamId }) => {
             if (!sessionId || !quizId || !questionId || (answerId === undefined) || !teamId) {
@@ -150,25 +150,15 @@ module.exports = socketHandlers;
                 }
             });
 
-            // Check if all teams have answered
+            // Check if all teams have answered (auto-timer logic)
             db.all('SELECT id FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRows) => {
                 if (err || !sessionRows || sessionRows.length === 0) return;
                 // Get all team IDs in the room
                 const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-                console.log('[TIMER DEBUG] clients in room:', clients);
-                console.log('[TIMER DEBUG] teamNames map:', Array.from(teamNames.entries()));
                 const playerIds = clients.filter(id => teamNames.has(id));
                 const answered = answeredTeams.get(sessionId);
-                console.log('[TIMER DEBUG] playerIds in room:', playerIds);
-                console.log('[TIMER DEBUG] answered set:', answered ? Array.from(answered) : answered);
-                if (answered) {
-                    const missing = playerIds.filter(id => !answered.has(id));
-                    if (missing.length > 0) {
-                        console.log('[TIMER DEBUG] Missing answers from:', missing);
-                    }
-                }
                 if (answered && playerIds.every(id => answered.has(id)) && playerIds.length > 0) {
-                    console.log('[TIMER DEBUG] All teams have answered, starting timer!');
+                    console.log('[AUTO-TIMER] All teams have submitted answers, starting timer!');
                     startCountdown(sessionId, 5); // 5 second timer
                     // Reset for next question
                     answeredTeams.set(sessionId, new Set());
@@ -231,6 +221,16 @@ module.exports = socketHandlers;
                 }
 
                 const question = questions[index];
+
+                // Determine if this is the first question of a new category
+                let isFirstInCategory = true;
+                if (index > 0) {
+                    const prevCategoryId = questions[index - 1].category_id;
+                    if (prevCategoryId === question.category_id) {
+                        isFirstInCategory = false;
+                    }
+                }
+
                 db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
                     if (err) {
                         console.error('❌ Failed to fetch answers:', err.message);
@@ -240,11 +240,18 @@ module.exports = socketHandlers;
                     // Fetch the category name for this question
                     db.get('SELECT name FROM categories WHERE id = ?', [question.category_id], (err, catRow) => {
                         const categoryName = catRow ? catRow.name : '';
-                        io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
-
-                        db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
-                            if (err) console.error('❌ Failed to update question index:', err);
-                        });
+                        const emitQuestion = () => {
+                            io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
+                            db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
+                                if (err) console.error('❌ Failed to update question index:', err);
+                            });
+                        };
+                        if (isFirstInCategory) {
+                            io.to(roomId).emit('category-title', { categoryName });
+                            setTimeout(emitQuestion, 5000); // Show for 5 seconds
+                        } else {
+                            emitQuestion();
+                        }
                     });
                 });
             });
