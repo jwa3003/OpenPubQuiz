@@ -9,6 +9,9 @@ const teamNames = new Map(); // Map<socketId, teamName>
 export default function socketHandlers() {
     const io = getIO();
 
+    // Track which teams have answered for the current question (shared across all sockets)
+    const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
+
     io.on('connection', (socket) => {
         console.log('🔌 New client connected:', socket.id);
 
@@ -62,11 +65,30 @@ export default function socketHandlers() {
             startCountdown(sessionId);
         });
 
+        // Track which teams have selected an answer for the current question
+        // and auto-start timer when all have selected
+        const selectedTeamsMap = new Map(); // Map<sessionId, Set<teamId>>
         socket.on('answer-selected', ({ sessionId, teamId }) => {
             if (!sessionId || !teamId) return;
             const roomId = `session-${sessionId}`;
+            if (!selectedTeamsMap.has(sessionId)) selectedTeamsMap.set(sessionId, new Set());
+            selectedTeamsMap.get(sessionId).add(teamId);
             io.to(roomId).emit('team-selected', { teamId });
+
+            // Check if all teams have selected
+            const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+            const playerIds = clients.filter(id => teamNames.has(id));
+            const selected = selectedTeamsMap.get(sessionId);
+            if (selected && playerIds.every(id => selected.has(id)) && playerIds.length > 0) {
+                console.log('[AUTO-TIMER] All teams have selected, starting timer!');
+                startCountdown(sessionId, 5); // 5 second timer
+                // Reset for next question
+                selectedTeamsMap.set(sessionId, new Set());
+            }
         });
+
+        // Track which teams have answered for the current question
+        const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
 
         socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, teamId }) => {
             if (!sessionId || !quizId || !questionId || (answerId === undefined) || !teamId) {
@@ -76,6 +98,12 @@ export default function socketHandlers() {
 
             const roomId = `session-${sessionId}`;
             io.to(roomId).emit('team-answered', { teamId });
+
+            // Track answers for this question
+            if (!answeredTeams.has(sessionId)) answeredTeams.set(sessionId, new Set());
+            answeredTeams.get(sessionId).add(teamId);
+            console.log('[SUBMIT DEBUG] submitAnswer received:', { sessionId, teamId });
+            console.log('[SUBMIT DEBUG] answeredTeams for session:', Array.from(answeredTeams.get(sessionId)));
 
             // Need to get the question's category_id for double-points logic
             db.get('SELECT q.category_id, a.is_correct FROM questions q JOIN answers a ON a.question_id = q.id WHERE a.id = ?', [answerId], (err, row) => {
@@ -112,6 +140,31 @@ export default function socketHandlers() {
                     });
                 } else {
                     console.log(`❌ Incorrect answer from ${teamNames.get(teamId)}`);
+                }
+            });
+
+            // Check if all teams have answered
+            db.all('SELECT id FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRows) => {
+                if (err || !sessionRows || sessionRows.length === 0) return;
+                // Get all team IDs in the room
+                const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                console.log('[TIMER DEBUG] clients in room:', clients);
+                console.log('[TIMER DEBUG] teamNames map:', Array.from(teamNames.entries()));
+                const playerIds = clients.filter(id => teamNames.has(id));
+                const answered = answeredTeams.get(sessionId);
+                console.log('[TIMER DEBUG] playerIds in room:', playerIds);
+                console.log('[TIMER DEBUG] answered set:', answered ? Array.from(answered) : answered);
+                if (answered) {
+                    const missing = playerIds.filter(id => !answered.has(id));
+                    if (missing.length > 0) {
+                        console.log('[TIMER DEBUG] Missing answers from:', missing);
+                    }
+                }
+                if (answered && playerIds.every(id => answered.has(id)) && playerIds.length > 0) {
+                    console.log('[TIMER DEBUG] All teams have answered, starting timer!');
+                    startCountdown(sessionId, 5); // 5 second timer
+                    // Reset for next question
+                    answeredTeams.set(sessionId, new Set());
                 }
             });
         });
@@ -208,10 +261,10 @@ export default function socketHandlers() {
         console.log('🏁 Final leaderboard:', leaderboard);
     }
 
-    function startCountdown(sessionId) {
+    function startCountdown(sessionId, seconds = 5) {
         const io = getIO();
         const roomId = `session-${sessionId}`;
-        let timeLeft = 10;
+        let timeLeft = seconds;
 
         if (timers.has(sessionId)) {
             clearInterval(timers.get(sessionId));

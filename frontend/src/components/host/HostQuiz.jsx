@@ -1,5 +1,9 @@
+
+
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
+
+
 
 function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -72,6 +76,8 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         socket.emit('next-question', { sessionId });
     };
 
+
+    // Host can manually start timer at any time
     const handleStartTimer = () => {
         socket.emit('start-timer', { sessionId });
     };
@@ -120,7 +126,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             <h4>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</h4>
 
             <button onClick={handleStartTimer} disabled={countdown > 0}>
-            {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
+            {countdown > 0 ? `Next question in ${countdown}s` : 'Start Timer (Force Next)'}
             </button>
             </>
         ) : (
