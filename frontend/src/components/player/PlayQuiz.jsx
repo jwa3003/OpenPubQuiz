@@ -1,11 +1,9 @@
-
-
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
 import DoubleCategorySelector from './DoubleCategorySelector.jsx';
 import QuestionDisplay from '../common/QuestionDisplay';
 import PlayerReviewSummary from './PlayerReviewSummary';
-import PlayerStepReview from './PlayerStepReview';
+import HostStepReview from '../host/HostStepReview';
 import Timer from '../common/Timer';
 import AnswerList from '../common/AnswerList';
 
@@ -43,6 +41,27 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   // Review phase state
   const [reviewPhase, setReviewPhase] = useState(false);
   const [reviewData, setReviewData] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState(null);
+  // Listen for host's signal to show team results (must be declared at top level, before any conditional returns)
+  const [showTeamsNow, setShowTeamsNow] = useState(false);
+  // Only one useEffect for this, at the top, before any returns
+  useEffect(() => {
+    const handler = () => setShowTeamsNow(true);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('show-team-results', handler);
+    }
+    if (window && window.socket) {
+      window.socket.on && window.socket.on('show-team-results', handler);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('show-team-results', handler);
+      }
+      if (window && window.socket) {
+        window.socket.off && window.socket.off('show-team-results', handler);
+      }
+    };
+  }, []);
   // Persist state to localStorage whenever it changes
   useEffect(() => {
     try {
@@ -134,7 +153,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
         clearTimeout(countdownRef.current);
         countdownRef.current = null;
       }
-      setShowResults(true);
+      // Don't showResults here; wait for review-phase event
     };
 
     const onQuizLoaded = ({ quizId: newQuizId, quizName }) => {
@@ -155,6 +174,17 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       quizLoadedFromSocket = true;
     };
 
+    // --- Listen for review-phase event ---
+    const onReviewPhase = (data) => {
+      setReviewPhase(true);
+      setReviewData(prev => ({ ...data, _nonce: Math.random() }));
+    };
+    const onReviewEnded = () => {
+      setReviewPhase(false);
+      setReviewData(null);
+      setShowResults(true);
+    };
+
     socket.on('quiz-started', onQuizStarted);
     socket.on('new-question', onNewQuestion);
     socket.on('countdown', onCountdown);
@@ -170,6 +200,14 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       setCategoryTitle(categoryName);
       setShowCategoryTitle(true);
       setTimeout(() => setShowCategoryTitle(false), 5000);
+    });
+    socket.on('review-phase', onReviewPhase);
+    socket.on('review-step', onReviewPhase);
+    socket.on('review-ended', onReviewEnded);
+    socket.on('review-summary', (data) => {
+      setReviewPhase(false);
+      setReviewData(null);
+      setReviewSummary(data.reviewSummary);
     });
 
     // Only fetch if quiz is not already set by socket event
@@ -197,6 +235,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       socket.off('countdown', onCountdown);
       socket.off('quiz-ended', onQuizEnded);
       socket.off('quiz-loaded', onQuizLoaded);
+      socket.off('review-phase', onReviewPhase);
+      socket.off('review-step', onReviewPhase);
+      socket.off('review-ended', onReviewEnded);
+      socket.off('review-summary');
       countdownRunningRef.current = false;
       if (countdownRef.current) {
         clearTimeout(countdownRef.current);
@@ -313,10 +355,12 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     );
   }
 
-  // --- Review Phase UI ---
+
+
   if (reviewPhase && reviewData && reviewData.reviewQuestion) {
-    const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
-    return <PlayerStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} currentTeamId={socket.id} />;
+    const { reviewQuestion, reviewIndex, reviewTotal, reviewStep } = reviewData;
+    // Use HostStepReview for all, but only host gets controls
+    return <HostStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} reviewStep={reviewStep} isHost={false} forceShowTeams={showTeamsNow} />;
   }
   if (reviewPhase && reviewData && reviewData.reviewSummary) {
     return <PlayerReviewSummary reviewSummary={reviewData.reviewSummary} currentTeamId={socket.id} />;

@@ -1,0 +1,190 @@
+.review-splash {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #181c24 0%, #232a36 100%);
+  color: #fff;
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.4s, transform 0.4s;
+}
+.review-splash.splash-in {
+  opacity: 1;
+  transform: scale(1);
+}
+.review-splash.splash-out {
+  opacity: 0;
+  transform: scale(1.05);
+}
+.review-splash-label {
+  font-size: 1.2rem;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+.review-splash-question {
+  font-weight: 900;
+  font-size: 2.7rem;
+  margin-top: 12px;
+  text-shadow: 0 2px 16px #000a;
+  text-align: center;
+  width: 90vw;
+  max-width: 500px;
+  word-break: break-word;
+  line-height: 1.15;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.review-answers {
+  padding: 32px;
+  background: #232a36;
+  color: #fff;
+  border-radius: 16px;
+  max-width: 900px;
+  margin: 2rem auto;
+  box-shadow: 0 4px 32px #0004;
+  animation: fadeInUp 0.5s;
+}
+.review-answers-question {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.review-answers-list {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 24px;
+}
+.review-answer {
+  background: #222;
+  color: #ccc;
+  font-weight: 400;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 10px 18px;
+  border: 1px solid #333;
+  box-shadow: none;
+  transition: all 0.3s;
+  position: relative;
+  font-size: 1.1rem;
+}
+.review-answer.correct {
+  background: #43a047;
+  color: #fff;
+  font-weight: 700;
+  border: 2px solid #43a047;
+  box-shadow: 0 2px 12px #43a04744;
+}
+.review-answer.reveal-anim {
+  animation: popCorrect 0.7s cubic-bezier(.23,1.12,.62,1.01);
+}
+@keyframes popCorrect {
+  0% { transform: scale(1); box-shadow: none; }
+  60% { transform: scale(1.12); box-shadow: 0 0 32px #43a04788; }
+  100% { transform: scale(1); box-shadow: 0 2px 12px #43a04744; }
+}
+.confetti {
+  margin-left: 12px;
+  font-size: 1.5rem;
+  animation: confettiPop 0.7s;
+}
+@keyframes confettiPop {
+  0% { opacity: 0; transform: translateY(-20px) scale(0.7); }
+  60% { opacity: 1; transform: translateY(0) scale(1.2); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.review-next-btn, .review-end-btn {
+  font-size: 1.1rem;
+  padding: 8px 24px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background 0.2s;
+}
+.review-end-btn {
+  background: #43a047;
+}
+.review-next-btn:hover, .review-end-btn:hover {
+  background: #125ea7;
+}
+.review-end-btn:hover {
+  background: #388e3c;
+}
+.review-teams {
+  padding: 32px;
+  background: #232a36;
+  color: #fff;
+  border-radius: 16px;
+  max-width: 900px;
+  margin: 2rem auto;
+  box-shadow: 0 4px 32px #0004;
+  animation: fadeInUp 0.5s;
+}
+.review-teams-list {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 24px;
+}
+.review-team {
+  opacity: 0.2;
+  background: #222;
+  color: #ccc;
+  font-weight: 400;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 10px 18px;
+  border: 1px solid #333;
+  box-shadow: none;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  font-size: 1.1rem;
+  position: relative;
+}
+.review-team.revealed {
+  opacity: 1;
+  color: #fff;
+  font-weight: 700;
+}
+.review-team.correct.revealed {
+  background: #43a047;
+  border: 2px solid #43a047;
+  box-shadow: 0 2px 12px #43a04744;
+}
+.review-team.incorrect.revealed {
+  background: #b71c1c;
+  border: 2px solid #b71c1c;
+  box-shadow: 0 2px 12px #b71c1c44;
+}
+.review-team-name {
+  flex: 1;
+}
+.review-team-icon {
+  font-size: 1.3rem;
+  margin-left: 12px;
+}
+.team-reveal-anim {
+  margin-left: 10px;
+  font-size: 1.5rem;
+  animation: confettiPop 0.7s;
+}
+.review-teams-btns {
+  margin-top: 24px;
+}
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}

@@ -1,6 +1,3 @@
-
-
-
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
 
@@ -8,6 +5,7 @@ import Leaderboard from '../common/Leaderboard';
 import QuestionDisplay from '../common/QuestionDisplay';
 import Timer from '../common/Timer';
 import HostStepReview from './HostStepReview';
+import HostReviewSummary from './HostReviewSummary';
 
 
 
@@ -22,6 +20,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [leaderboard, setLeaderboard] = useState([]);
     const [reviewPhase, setReviewPhase] = useState(false);
     const [reviewData, setReviewData] = useState(null);
+    const [reviewSummary, setReviewSummary] = useState(null);
     const countdownRef = useRef(null);
 
     useEffect(() => {
@@ -41,6 +40,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             setCountdown(0);
             setReviewPhase(false);
             setReviewData(null);
+            setReviewSummary(null);
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
@@ -70,6 +70,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             setCountdown(0);
             setReviewPhase(false);
             setReviewData(null);
+            setReviewSummary(null);
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
@@ -84,12 +85,20 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         // --- Review Phase events ---
         socket.on('review-phase', (data) => {
             setReviewPhase(true);
-            // Always set a new object to force re-render, even if data is the same
+            setReviewData(prev => ({ ...data, _nonce: Math.random() }));
+        });
+        socket.on('review-step', (data) => {
+            setReviewPhase(true);
             setReviewData(prev => ({ ...data, _nonce: Math.random() }));
         });
         socket.on('review-ended', () => {
             setReviewPhase(false);
             setReviewData(null);
+        });
+        socket.on('review-summary', (data) => {
+            setReviewPhase(false);
+            setReviewData(null);
+            setReviewSummary(data.reviewSummary);
         });
 
         return () => {
@@ -100,7 +109,9 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             socket.off('final-leaderboard');
             socket.off('score-update');
             socket.off('review-phase');
+            socket.off('review-step');
             socket.off('review-ended');
+            socket.off('review-summary');
             if (countdownRef.current) clearInterval(countdownRef.current);
         };
     }, [sessionId]);
@@ -173,17 +184,22 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
 
     // --- Review Phase UI ---
     if (reviewPhase && reviewData && reviewData.reviewQuestion) {
-        const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
-        const handleNext = () => socket.emit('next-review-question', { sessionId });
+        const { reviewQuestion, reviewIndex, reviewTotal, reviewStep } = reviewData;
+        const handleNext = () => socket.emit('next-review-step', { sessionId });
         return (
             <HostStepReview
                 reviewQuestion={reviewQuestion}
                 reviewIndex={reviewIndex}
                 reviewTotal={reviewTotal}
+                reviewStep={reviewStep}
                 onNext={handleNext}
                 onEnd={handleEndReview}
             />
         );
+    }
+
+    if (reviewSummary) {
+        return <HostReviewSummary reviewSummary={reviewSummary} onEndReview={handleEndReview} />;
     }
 
     return (

@@ -30,87 +30,93 @@ function sendNextQuestion(sessionId) {
         let index = sessionRow.current_question_index ?? 0;
 
         db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
+            // If quiz is finished (index >= questions.length), show review for all questions if enabled
             if (err || !questions || index >= questions.length) {
-                if (REVIEW_PHASE_ENABLED) {
+                if (REVIEW_PHASE_ENABLED && questions && questions.length > 0) {
                     // Build review summary for all questions in this session from DB
-                    db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, allQuestions) => {
-                        if (err || !allQuestions) return finishQuiz();
-                        let reviewSummary = [];
-                        let pending = allQuestions.length;
-                        allQuestions.forEach((question, qIdx) => {
-                            db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
-                                const correct = answers && answers.find(a => a.is_correct == 1);
-                                const correctAnswerId = correct ? String(correct.id) : null;
-                                const correctAnswerText = correct ? correct.text : '';
-                                const explanation = question.explanation || '';
-                                db.all('SELECT * FROM quiz_review_answers WHERE session_id = ? AND question_id = ?', [sessionId, question.id], (err, teamAnswers) => {
-                                    const teamAnswersWithCorrect = (teamAnswers || []).map(ans => ({
-                                        teamId: ans.team_id,
-                                        teamName: ans.team_name,
-                                        answerId: ans.answer_id,
-                                        answerText: ans.answer_text,
-                                        isCorrect: String(ans.answer_id) === String(correctAnswerId)
-                                    }));
-                                    reviewSummary[qIdx] = {
-                                        questionId: question.id,
-                                        questionText: question.text,
-                                        correctAnswerId,
-                                        correctAnswerText,
-                                        explanation,
-                                        teamAnswers: teamAnswersWithCorrect
+                    let reviewSummary = [];
+                    let pending = questions.length;
+                    questions.forEach((question, qIdx) => {
+                        db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
+                            const correct = answers && answers.find(a => a.is_correct == 1);
+                            const correctAnswerId = correct ? String(correct.id) : null;
+                            const correctAnswerText = correct ? correct.text : '';
+                            const explanation = question.explanation || '';
+                            db.all('SELECT * FROM quiz_review_answers WHERE session_id = ? AND question_id = ?', [sessionId, question.id], (err, teamAnswers) => {
+                                const teamAnswersWithCorrect = (teamAnswers || []).map(ans => ({
+                                    teamId: ans.team_id,
+                                    teamName: ans.team_name,
+                                    answerId: ans.answer_id,
+                                    answerText: ans.answer_text,
+                                    isCorrect: String(ans.answer_id) === String(correctAnswerId)
+                                }));
+                                reviewSummary[qIdx] = {
+                                    questionId: question.id,
+                                    questionText: question.text,
+                                    correctAnswerId,
+                                    correctAnswerText,
+                                    explanation,
+                                    teamAnswers: teamAnswersWithCorrect,
+                                    allAnswers: answers ? answers.map(a => ({ id: a.id, text: a.text })) : []
+                                };
+                                pending--;
+                                if (pending === 0) {
+                                    // All review data ready, start backend-driven step-by-step review
+                                    let reviewState = {
+                                        reviewIndex: 0, // which question
+                                        reviewStep: 0    // which step within question (0=show Q&A, 1=highlight correct, 2=show team results)
                                     };
-                                    pending--;
-                                    if (pending === 0) {
-                                        // All review data ready, start step-through review
-                                        let reviewIndex = 0;
-                                        emitCurrentReviewQuestion();
-                                        // Register per-socket handlers for review navigation
-                                        const registerReviewHandlers = (socket) => {
-                                            function handleNextReviewQuestion({ sessionId: stepSessionId }) {
-                                                console.log('[REVIEW DEBUG] next-review-question received:', { stepSessionId, sessionId, reviewIndex });
-                                                if (stepSessionId !== sessionId) return;
-                                                reviewIndex++;
-                                                if (reviewIndex < reviewSummary.length) {
-                                                    console.log('[REVIEW DEBUG] Advancing to reviewIndex', reviewIndex);
-                                                    emitCurrentReviewQuestion();
-                                                } else {
-                                                    console.log('[REVIEW DEBUG] End of review phase reached, emitting review-ended');
-                                                    socket.emit('review-ended');
-                                                    db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
-                                                    finishQuiz();
-                                                    socket.off('next-review-question', handleNextReviewQuestion);
+                                    function emitCurrentReviewStep() {
+                                        if (reviewSummary.length === 0) return finishQuiz();
+                                        const { reviewIndex, reviewStep } = reviewState;
+                                        const reviewQuestion = reviewSummary[reviewIndex];
+                                        io.to(roomId).emit('review-step', {
+                                            reviewQuestion,
+                                            reviewIndex,
+                                            reviewTotal: reviewSummary.length,
+                                            reviewStep // 0=show Q&A, 1=highlight correct, 2=show team results
+                                        });
+                                    }
+                                    // Register per-socket handlers for review navigation
+                                    const registerReviewStepHandlers = (socket) => {
+                                        function handleNextReviewStep({ sessionId: stepSessionId }) {
+                                            if (stepSessionId !== sessionId) return;
+                                            reviewState.reviewStep++;
+                                            // 3 steps: 0=show Q&A, 1=highlight correct, 2=show team results
+                                            if (reviewState.reviewStep > 2) {
+                                                reviewState.reviewStep = 0;
+                                                reviewState.reviewIndex++;
+                                                if (reviewState.reviewIndex >= reviewSummary.length) {
+                                                    // End of review phase: emit review-summary to all clients
+                                                    io.to(roomId).emit('review-summary', { reviewSummary });
+                                                    // Wait for host to emit end-review before leaderboard
+                                                    socket.off('next-review-step', handleNextReviewStep);
                                                     socket.off('end-review', handleEndReview);
+                                                    return;
                                                 }
                                             }
-                                            function handleEndReview({ sessionId: endSessionId }) {
-                                                console.log('[REVIEW DEBUG] end-review received:', { endSessionId, sessionId });
-                                                if (endSessionId !== sessionId) return;
-                                                socket.emit('review-ended');
-                                                db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
-                                                finishQuiz();
-                                                socket.off('next-review-question', handleNextReviewQuestion);
-                                                socket.off('end-review', handleEndReview);
-                                            }
-                                            socket.on('next-review-question', handleNextReviewQuestion);
-                                            socket.on('end-review', handleEndReview);
-                                        };
-                                        // Register handlers for all currently connected sockets in the room
-                                        const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-                                        clients.forEach(socketId => {
-                                            const socket = io.sockets.sockets.get(socketId);
-                                            if (socket) registerReviewHandlers(socket);
-                                        });
-                                        function emitCurrentReviewQuestion() {
-                                            console.log('[REVIEW DEBUG] Emitting review-phase for reviewIndex', reviewIndex, '/', reviewSummary.length);
-                                            if (reviewSummary.length === 0) return finishQuiz();
-                                            io.to(roomId).emit('review-phase', {
-                                                reviewQuestion: reviewSummary[reviewIndex],
-                                                reviewIndex,
-                                                reviewTotal: reviewSummary.length
-                                            });
+                                            emitCurrentReviewStep();
                                         }
-                                    }
-                                });
+                                        function handleEndReview({ sessionId: endSessionId }) {
+                                            if (endSessionId !== sessionId) return;
+                                            io.to(roomId).emit('review-ended');
+                                            db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
+                                            finishQuiz();
+                                            socket.off('next-review-step', handleNextReviewStep);
+                                            socket.off('end-review', handleEndReview);
+                                        }
+                                        socket.on('next-review-step', handleNextReviewStep);
+                                        socket.on('end-review', handleEndReview);
+                                    };
+                                    // Register handlers for all currently connected sockets in the room
+                                    const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                                    clients.forEach(socketId => {
+                                        const socket = io.sockets.sockets.get(socketId);
+                                        if (socket) registerReviewStepHandlers(socket);
+                                    });
+                                    // Start review at step 0 of first question
+                                    emitCurrentReviewStep();
+                                }
                             });
                         });
                     });
@@ -123,7 +129,6 @@ function sendNextQuestion(sessionId) {
                 }
                 return;
             }
-
             // --- Normal next question flow ---
             console.log('[REVIEW DEBUG] Normal next question flow, index:', index);
             const question = questions[index];
@@ -159,7 +164,6 @@ function sendNextQuestion(sessionId) {
 }
 
 function socketHandlers() {
-    module.exports = socketHandlers;
     const io = getIO();
 
     io.on('connection', (socket) => {
@@ -206,6 +210,38 @@ function socketHandlers() {
                                 quizName: quiz.name,
                             });
                         }
+                    });
+                }
+
+                // --- PATCH: Re-register review step handlers for host if review is in progress ---
+                // This ensures host can always control review phase after reconnect/reload
+                if (role === 'host') {
+                    // Check if a review is in progress for this session
+                    db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
+                        if (err || !sessionRow) return;
+                        const quizId = sessionRow.quiz_id;
+                        db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
+                            if (err || !questions || questions.length === 0) return;
+                            // Check if review answers exist for this session (review in progress)
+                            db.get('SELECT COUNT(*) as cnt FROM quiz_review_answers WHERE session_id = ?', [sessionId], (err, row) => {
+                                if (err || !row || row.cnt === 0) return;
+                                // Re-register review step handlers for this host socket
+                                // (copy of registerReviewStepHandlers logic)
+                                function handleNextReviewStep({ sessionId: stepSessionId }) {
+                                    if (stepSessionId !== sessionId) return;
+                                    // This will be handled by the main reviewState in sendNextQuestion
+                                    // Just emit a debug log for now
+                                    console.log(`[REVIEW DEBUG] Host ${socket.id} emitted next-review-step for session ${sessionId}`);
+                                }
+                                function handleEndReview({ sessionId: endSessionId }) {
+                                    if (endSessionId !== sessionId) return;
+                                    console.log(`[REVIEW DEBUG] Host ${socket.id} emitted end-review for session ${sessionId}`);
+                                }
+                                socket.on('next-review-step', handleNextReviewStep);
+                                socket.on('end-review', handleEndReview);
+                                console.log(`[REVIEW DEBUG] Registered review step handlers for host ${socket.id} on joinRoom`);
+                            });
+                        });
                     });
                 }
             });
@@ -452,4 +488,3 @@ function socketHandlers() {
 }
 
 module.exports = socketHandlers;
-                    // Fetch the category name for this question
