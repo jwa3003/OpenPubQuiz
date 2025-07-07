@@ -1,23 +1,169 @@
-// backend/sockets/handlers.js
 
+// backend/sockets/handlers.js (refactored)
 const db = require('../db/db.js');
 const { getIO } = require('../utils/socketInstance.js');
+const { startCountdown } = require('./timerUtils');
+const { emitLeaderboard } = require('./leaderboardUtils');
 
-const timers = new Map(); // Store timers per session
+
+// === Feature flag for review phase ===
+const REVIEW_PHASE_ENABLED = true;
+
 const scores = new Map(); // Map<sessionId, Map<socketId, score>>
 const teamNames = new Map(); // Map<socketId, teamName>
-
-
-// Track which teams have selected an answer for the current question (shared across all sockets)
 const selectedTeamsMap = new Map(); // Map<sessionId, Set<teamId>>
-// Track which teams have answered for the current question (shared across all sockets)
 const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
+
+
+function sendNextQuestion(sessionId) {
+    const io = getIO();
+    const roomId = `session-${sessionId}`;
+
+
+    db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
+        if (err || !sessionRow) {
+            console.error('❌ Could not fetch quiz session:', err);
+            return;
+        }
+
+        const quizId = sessionRow.quiz_id;
+        let index = sessionRow.current_question_index ?? 0;
+
+        db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
+            if (err || !questions || index >= questions.length) {
+                if (REVIEW_PHASE_ENABLED) {
+                    // Build review summary for all questions in this session from DB
+                    db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, allQuestions) => {
+                        if (err || !allQuestions) return finishQuiz();
+                        let reviewSummary = [];
+                        let pending = allQuestions.length;
+                        allQuestions.forEach((question, qIdx) => {
+                            db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
+                                const correct = answers && answers.find(a => a.is_correct == 1);
+                                const correctAnswerId = correct ? String(correct.id) : null;
+                                const correctAnswerText = correct ? correct.text : '';
+                                const explanation = question.explanation || '';
+                                db.all('SELECT * FROM quiz_review_answers WHERE session_id = ? AND question_id = ?', [sessionId, question.id], (err, teamAnswers) => {
+                                    const teamAnswersWithCorrect = (teamAnswers || []).map(ans => ({
+                                        teamId: ans.team_id,
+                                        teamName: ans.team_name,
+                                        answerId: ans.answer_id,
+                                        answerText: ans.answer_text,
+                                        isCorrect: String(ans.answer_id) === String(correctAnswerId)
+                                    }));
+                                    reviewSummary[qIdx] = {
+                                        questionId: question.id,
+                                        questionText: question.text,
+                                        correctAnswerId,
+                                        correctAnswerText,
+                                        explanation,
+                                        teamAnswers: teamAnswersWithCorrect
+                                    };
+                                    pending--;
+                                    if (pending === 0) {
+                                        // All review data ready, start step-through review
+                                        let reviewIndex = 0;
+                                        emitCurrentReviewQuestion();
+                                        // Register per-socket handlers for review navigation
+                                        const registerReviewHandlers = (socket) => {
+                                            function handleNextReviewQuestion({ sessionId: stepSessionId }) {
+                                                console.log('[REVIEW DEBUG] next-review-question received:', { stepSessionId, sessionId, reviewIndex });
+                                                if (stepSessionId !== sessionId) return;
+                                                reviewIndex++;
+                                                if (reviewIndex < reviewSummary.length) {
+                                                    console.log('[REVIEW DEBUG] Advancing to reviewIndex', reviewIndex);
+                                                    emitCurrentReviewQuestion();
+                                                } else {
+                                                    console.log('[REVIEW DEBUG] End of review phase reached, emitting review-ended');
+                                                    socket.emit('review-ended');
+                                                    db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
+                                                    finishQuiz();
+                                                    socket.off('next-review-question', handleNextReviewQuestion);
+                                                    socket.off('end-review', handleEndReview);
+                                                }
+                                            }
+                                            function handleEndReview({ sessionId: endSessionId }) {
+                                                console.log('[REVIEW DEBUG] end-review received:', { endSessionId, sessionId });
+                                                if (endSessionId !== sessionId) return;
+                                                socket.emit('review-ended');
+                                                db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
+                                                finishQuiz();
+                                                socket.off('next-review-question', handleNextReviewQuestion);
+                                                socket.off('end-review', handleEndReview);
+                                            }
+                                            socket.on('next-review-question', handleNextReviewQuestion);
+                                            socket.on('end-review', handleEndReview);
+                                        };
+                                        // Register handlers for all currently connected sockets in the room
+                                        const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                                        clients.forEach(socketId => {
+                                            const socket = io.sockets.sockets.get(socketId);
+                                            if (socket) registerReviewHandlers(socket);
+                                        });
+                                        function emitCurrentReviewQuestion() {
+                                            console.log('[REVIEW DEBUG] Emitting review-phase for reviewIndex', reviewIndex, '/', reviewSummary.length);
+                                            if (reviewSummary.length === 0) return finishQuiz();
+                                            io.to(roomId).emit('review-phase', {
+                                                reviewQuestion: reviewSummary[reviewIndex],
+                                                reviewIndex,
+                                                reviewTotal: reviewSummary.length
+                                            });
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                    });
+                } else {
+                    finishQuiz();
+                }
+                function finishQuiz() {
+                    emitLeaderboard(sessionId, scores.get(sessionId), teamNames);
+                    io.to(roomId).emit('quiz-ended');
+                }
+                return;
+            }
+
+            // --- Normal next question flow ---
+            console.log('[REVIEW DEBUG] Normal next question flow, index:', index);
+            const question = questions[index];
+            // Determine if this is the first question of a new category
+            let isFirstInCategory = true;
+            if (index > 0) {
+                const prevCategoryId = questions[index - 1].category_id;
+                if (prevCategoryId === question.category_id) {
+                    isFirstInCategory = false;
+                }
+            }
+            db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
+                console.log('[REVIEW DEBUG] Answers for question', question.id, ':', JSON.stringify(answers, null, 2));
+                db.get('SELECT name FROM categories WHERE id = ?', [question.category_id], (err, catRow) => {
+                    const categoryName = catRow ? catRow.name : '';
+                    const emitQuestion = () => {
+                        io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
+                        db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
+                            if (err) console.error('❌ Failed to update question index:', err);
+                        });
+                        // No longer needed: review answers are now stored in DB
+                    };
+                    if (isFirstInCategory) {
+                        io.to(roomId).emit('category-title', { categoryName });
+                        setTimeout(emitQuestion, 5000); // Show for 5 seconds
+                    } else {
+                        emitQuestion();
+                    }
+                });
+            });
+        });
+    });
+}
 
 function socketHandlers() {
     module.exports = socketHandlers;
     const io = getIO();
 
     io.on('connection', (socket) => {
+        // Step-through review phase: now handled in sendNextQuestion using DB, no in-memory state needed here
         console.log('🔌 New client connected:', socket.id);
 
         socket.on('joinRoom', ({ sessionId, teamName, role, quizId }) => {
@@ -42,7 +188,6 @@ function socketHandlers() {
                     io.to(roomId).emit('teamJoined', { id: socket.id, name: userName, role });
                     teamNames.set(socket.id, teamName);
 
-                    // Insert team into quiz_sessions_teams if not already present
                     db.run(
                         `INSERT OR IGNORE INTO quiz_sessions_teams (session_id, team_id, team_name) VALUES (?, ?, ?)`,
                         [sessionId, socket.id, teamName]
@@ -52,7 +197,6 @@ function socketHandlers() {
                     if (!scores.get(sessionId).has(socket.id)) scores.get(sessionId).set(socket.id, 0);
                 }
 
-                // Emit quiz-loaded event with quizId and quizName
                 const activeQuizId = quizId || session.quiz_id;
                 if (activeQuizId) {
                     db.get('SELECT * FROM quizzes WHERE id = ?', [activeQuizId], (err, quiz) => {
@@ -71,11 +215,52 @@ function socketHandlers() {
             sendNextQuestion(sessionId);
         });
 
+
+        // Helper: On timer end, auto-submit missing answers, then advance
+        function autoSubmitMissingAnswersAndAdvance(sessionId) {
+            const io = getIO();
+            const roomId = `session-${sessionId}`;
+            db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
+                if (err || !sessionRow) return sendNextQuestion(sessionId);
+                const quizId = sessionRow.quiz_id;
+                let index = sessionRow.current_question_index ?? 0;
+                db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
+                    if (err || !questions || index >= questions.length) return sendNextQuestion(sessionId);
+                    const question = questions[index];
+                    const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                    const playerIds = clients.filter(id => teamNames.has(id));
+                    const answered = answeredTeams.get(sessionId) || new Set();
+                    const missingTeamIds = playerIds.filter(id => !answered.has(id));
+                    if (missingTeamIds.length === 0) {
+                        sendNextQuestion(sessionId);
+                        return;
+                    }
+                    // Auto-submit null/empty answers for missing teams
+                    let pending = missingTeamIds.length;
+                    missingTeamIds.forEach(teamId => {
+                        // Insert a null/empty answer for review phase
+                        db.run(
+                            `INSERT INTO quiz_review_answers (session_id, question_id, team_id, team_name, answer_id, answer_text) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [sessionId, question.id, teamId, teamNames.get(teamId) || 'Unknown', null, ''],
+                            () => {
+                                if (!answeredTeams.has(sessionId)) answeredTeams.set(sessionId, new Set());
+                                answeredTeams.get(sessionId).add(teamId);
+                                io.to(roomId).emit('team-answered', { teamId });
+                                pending--;
+                                if (pending === 0) {
+                                    sendNextQuestion(sessionId);
+                                }
+                            }
+                        );
+                    });
+                });
+            });
+        }
+
         socket.on('start-timer', ({ sessionId }) => {
-            startCountdown(sessionId);
+            startCountdown(sessionId, 5, () => autoSubmitMissingAnswersAndAdvance(sessionId));
         });
 
-        // Track which teams have selected an answer for the current question (for UI and auto-timer)
         socket.on('answer-selected', ({ sessionId, teamId }) => {
             if (!sessionId || !teamId) return;
             const roomId = `session-${sessionId}`;
@@ -83,21 +268,19 @@ function socketHandlers() {
             selectedTeamsMap.get(sessionId).add(teamId);
             io.to(roomId).emit('team-selected', { teamId });
 
-            // Auto-timer: check if all teams have selected
             const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
             const playerIds = clients.filter(id => teamNames.has(id));
             const selected = selectedTeamsMap.get(sessionId);
             if (selected && playerIds.every(id => selected.has(id)) && playerIds.length > 0) {
                 console.log('[AUTO-TIMER] All teams have selected, starting timer!');
-                startCountdown(sessionId, 5); // 5 second timer
-                // Reset for next question
+                startCountdown(sessionId, 5, () => sendNextQuestion(sessionId));
                 selectedTeamsMap.set(sessionId, new Set());
             }
         });
 
 
-
         socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, teamId }) => {
+
             if (!sessionId || !quizId || !questionId || (answerId === undefined) || !teamId) {
                 socket.emit('error', { message: 'Missing data for submitAnswer' });
                 return;
@@ -106,19 +289,36 @@ function socketHandlers() {
             const roomId = `session-${sessionId}`;
             io.to(roomId).emit('team-answered', { teamId });
 
-            // Track answers for this question
             if (!answeredTeams.has(sessionId)) answeredTeams.set(sessionId, new Set());
             answeredTeams.get(sessionId).add(teamId);
             console.log('[SUBMIT DEBUG] submitAnswer received:', { sessionId, teamId });
             console.log('[SUBMIT DEBUG] answeredTeams for session:', Array.from(answeredTeams.get(sessionId)));
 
-            // Need to get the question's category_id for double-points logic
+            // Store answer for review phase in persistent DB table
+            db.get('SELECT text FROM answers WHERE id = ?', [answerId], (err, answerRow) => {
+                const answerText = answerRow ? answerRow.text : '';
+                db.run(
+                    `INSERT INTO quiz_review_answers (session_id, question_id, team_id, team_name, answer_id, answer_text) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [sessionId, questionId, teamId, teamNames.get(teamId) || 'Unknown', answerId, answerText]
+                );
+            });
+
+            // After storing, check if all teams have submitted and all answers are present
+            db.all('SELECT id FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRows) => {
+                if (err || !sessionRows || sessionRows.length === 0) return;
+                const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                const playerIds = clients.filter(id => teamNames.has(id));
+                const answered = answeredTeams.get(sessionId);
+                if (REVIEW_PHASE_ENABLED && answered && playerIds.every(id => answered.has(id)) && playerIds.length > 0) {
+                    // All teams have submitted, ready for review phase
+                    sendNextQuestion(sessionId);
+                }
+            });
+
             db.get('SELECT q.category_id, a.is_correct FROM questions q JOIN answers a ON a.question_id = q.id WHERE a.id = ?', [answerId], (err, row) => {
                 if (err || !row) return;
 
-                // is_correct may be 0/1 as integer, so check with == 1
                 if (row.is_correct == 1) {
-                    // Check if this team has selected this category for double points
                     db.get('SELECT category_id FROM teams_double_category WHERE session_id = ? AND team_id = ?', [sessionId, teamId], (err, doubleRow) => {
                         let points = 1;
                         if (!err && doubleRow && Number(doubleRow.category_id) === Number(row.category_id)) {
@@ -135,7 +335,6 @@ function socketHandlers() {
 
                         console.log(`🎯 ${teamNames.get(teamId)} now has ${prev + points} point(s)`);
 
-                        // Emit live leaderboard update
                         const partialLeaderboard = Array.from(sessionScores.entries())
                         .map(([id, score]) => ({
                             teamName: teamNames.get(id) || 'Unknown',
@@ -150,18 +349,68 @@ function socketHandlers() {
                 }
             });
 
-            // Check if all teams have answered (auto-timer logic)
             db.all('SELECT id FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRows) => {
                 if (err || !sessionRows || sessionRows.length === 0) return;
-                // Get all team IDs in the room
                 const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
                 const playerIds = clients.filter(id => teamNames.has(id));
                 const answered = answeredTeams.get(sessionId);
                 if (answered && playerIds.every(id => answered.has(id)) && playerIds.length > 0) {
-                    console.log('[AUTO-TIMER] All teams have submitted answers, starting timer!');
-                    startCountdown(sessionId, 5); // 5 second timer
-                    // Reset for next question
-                    answeredTeams.set(sessionId, new Set());
+                    // Accumulate review summary for the just-answered question (index = current_question_index)
+                    db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
+                        if (err || !sessionRow) return;
+                        const quizId = sessionRow.quiz_id;
+                        let index = sessionRow.current_question_index ?? 0;
+                        db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
+                            if (err || !questions || index > questions.length) return;
+                            // The just-answered question is questions[index]
+                            const question = questions[index];
+                            db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
+                                if (err || !answers) return;
+                                const correct = answers.find(a => a.is_correct == 1);
+                                const correctAnswerId = correct ? String(correct.id) : null;
+                                const correctAnswerText = correct ? correct.text : '';
+                                const explanation = question.explanation || '';
+                                if (!reviewSummaryBySession.has(sessionId)) reviewSummaryBySession.set(sessionId, []);
+                                const summaryArr = reviewSummaryBySession.get(sessionId);
+                                const alreadyIncluded = summaryArr.some(q => q.questionId === question.id);
+                                if (!alreadyIncluded) {
+                                    const reviewAnswers = teamAnswersForReview.get(sessionId) || [];
+                                    const teamAnswersWithCorrect = reviewAnswers.map(ans => {
+                                        const isCorrect = String(ans.answerId) === String(correctAnswerId);
+                                        return {
+                                            ...ans,
+                                            isCorrect
+                                        };
+                                    });
+                                    summaryArr.push({
+                                        questionId: question.id,
+                                        questionText: question.text,
+                                        correctAnswerId,
+                                        correctAnswerText,
+                                        explanation,
+                                        teamAnswers: teamAnswersWithCorrect
+                                    });
+                                    reviewSummaryBySession.set(sessionId, summaryArr);
+                                    console.log('[REVIEW DEBUG] Added to reviewSummary for session', sessionId, JSON.stringify(summaryArr, null, 2));
+                                }
+                            });
+                        });
+                    });
+                    // Now, advance to next question or review phase
+                    if (REVIEW_PHASE_ENABLED) {
+                        // Listen for end-review from host
+                        socket.on('end-review', ({ sessionId: endSessionId }) => {
+                            if (endSessionId !== sessionId) return;
+                            io.to(roomId).emit('review-ended');
+                            // Reset for next question
+                            answeredTeams.set(sessionId, new Set());
+                            teamAnswersForReview.set(sessionId, []);
+                            sendNextQuestion(sessionId);
+                        });
+                    } else {
+                        startCountdown(sessionId, 5, () => sendNextQuestion(sessionId));
+                        answeredTeams.set(sessionId, new Set());
+                    }
                 }
             });
         });
@@ -193,112 +442,7 @@ function socketHandlers() {
             }
         });
     });
-
-    function sendNextQuestion(sessionId) {
-        const io = getIO();
-        const roomId = `session-${sessionId}`;
-
-        if (timers.has(sessionId)) {
-            clearInterval(timers.get(sessionId));
-            timers.delete(sessionId);
-        }
-
-        db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
-            if (err || !sessionRow) {
-                console.error('❌ Could not fetch quiz session:', err);
-                return;
-            }
-
-            const quizId = sessionRow.quiz_id;
-            let index = sessionRow.current_question_index ?? 0;
-
-            db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
-                if (err || !questions || index >= questions.length) {
-                    console.log('📕 No more questions. Ending quiz.');
-                    emitLeaderboard(sessionId);
-                    io.to(roomId).emit('quiz-ended');
-                    return;
-                }
-
-                const question = questions[index];
-
-                // Determine if this is the first question of a new category
-                let isFirstInCategory = true;
-                if (index > 0) {
-                    const prevCategoryId = questions[index - 1].category_id;
-                    if (prevCategoryId === question.category_id) {
-                        isFirstInCategory = false;
-                    }
-                }
-
-                db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
-                    if (err) {
-                        console.error('❌ Failed to fetch answers:', err.message);
-                        return;
-                    }
-
-                    // Fetch the category name for this question
-                    db.get('SELECT name FROM categories WHERE id = ?', [question.category_id], (err, catRow) => {
-                        const categoryName = catRow ? catRow.name : '';
-                        const emitQuestion = () => {
-                            io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
-                            db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
-                                if (err) console.error('❌ Failed to update question index:', err);
-                            });
-                        };
-                        if (isFirstInCategory) {
-                            io.to(roomId).emit('category-title', { categoryName });
-                            setTimeout(emitQuestion, 5000); // Show for 5 seconds
-                        } else {
-                            emitQuestion();
-                        }
-                    });
-                });
-            });
-        });
-    }
-
-    function emitLeaderboard(sessionId) {
-        const io = getIO();
-        const sessionScores = scores.get(sessionId);
-        if (!sessionScores) return;
-
-        const leaderboard = Array.from(sessionScores.entries())
-        .map(([teamId, score]) => ({
-            teamName: teamNames.get(teamId) || 'Unknown',
-                                   score,
-        }))
-        .sort((a, b) => b.score - a.score);
-
-        const roomId = `session-${sessionId}`;
-        io.to(roomId).emit('final-leaderboard', leaderboard);
-        console.log('🏁 Final leaderboard:', leaderboard);
-    }
-
-    function startCountdown(sessionId, seconds = 5) {
-        const io = getIO();
-        const roomId = `session-${sessionId}`;
-        let timeLeft = seconds;
-
-        if (timers.has(sessionId)) {
-            clearInterval(timers.get(sessionId));
-        }
-
-        io.to(roomId).emit('countdown', timeLeft);
-
-        const timer = setInterval(() => {
-            timeLeft -= 1;
-            if (timeLeft > 0) {
-                io.to(roomId).emit('countdown', timeLeft);
-            } else {
-                clearInterval(timer);
-                timers.delete(sessionId);
-                sendNextQuestion(sessionId);
-            }
-        }, 1000);
-
-        timers.set(sessionId, timer);
-    }
 }
 
 module.exports = socketHandlers;
+                    // Fetch the category name for this question

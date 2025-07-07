@@ -1,7 +1,13 @@
 
 
+
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
+
+import Leaderboard from '../common/Leaderboard';
+import QuestionDisplay from '../common/QuestionDisplay';
+import Timer from '../common/Timer';
+import HostStepReview from './HostStepReview';
 
 
 
@@ -14,6 +20,8 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [countdown, setCountdown] = useState(0);
     const [quizEnded, setQuizEnded] = useState(false);
     const [leaderboard, setLeaderboard] = useState([]);
+    const [reviewPhase, setReviewPhase] = useState(false);
+    const [reviewData, setReviewData] = useState(null);
     const countdownRef = useRef(null);
 
     useEffect(() => {
@@ -31,57 +39,79 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             setSelectedTeams(new Set());
             setQuizEnded(false);
             setCountdown(0);
+            setReviewPhase(false);
+            setReviewData(null);
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
-            socket.on('team-selected', ({ teamId }) => {
-                setSelectedTeams((prev) => {
-                    const newSet = new Set(prev);
-                    newSet.add(teamId);
-                    return newSet;
-                });
+        socket.on('team-selected', ({ teamId }) => {
+            setSelectedTeams((prev) => {
+                const newSet = new Set(prev);
+                newSet.add(teamId);
+                return newSet;
             });
+        });
 
-            socket.on('countdown', (seconds) => {
-                setCountdown(seconds);
-                if (countdownRef.current) clearInterval(countdownRef.current);
-                let timeLeft = seconds;
-                countdownRef.current = setInterval(() => {
-                    timeLeft -= 1;
-                    setCountdown(timeLeft);
-                    if (timeLeft <= 0) clearInterval(countdownRef.current);
-                }, 1000);
-            });
+        socket.on('countdown', (seconds) => {
+            setCountdown(seconds);
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            let timeLeft = seconds;
+            countdownRef.current = setInterval(() => {
+                timeLeft -= 1;
+                setCountdown(timeLeft);
+                if (timeLeft <= 0) clearInterval(countdownRef.current);
+            }, 1000);
+        });
 
-            socket.on('quiz-ended', () => {
-                setQuizEnded(true);
-                setCurrentQuestion(null);
-                setAnswers([]);
-                setCountdown(0);
-                if (countdownRef.current) clearInterval(countdownRef.current);
-            });
+        socket.on('quiz-ended', () => {
+            setQuizEnded(true);
+            setCurrentQuestion(null);
+            setAnswers([]);
+            setCountdown(0);
+            setReviewPhase(false);
+            setReviewData(null);
+            if (countdownRef.current) clearInterval(countdownRef.current);
+        });
 
-                socket.on('final-leaderboard', (scores) => {
-                    setLeaderboard(scores);
-                });
+        socket.on('final-leaderboard', (scores) => {
+            setLeaderboard(scores);
+        });
 
-                socket.on('score-update', (scores) => {
-                    setLeaderboard(scores);
-                });
+        socket.on('score-update', (scores) => {
+            setLeaderboard(scores);
+        });
 
-                return () => {
-                    socket.off('new-question');
-                    socket.off('team-selected');
-                    socket.off('countdown');
-                    socket.off('quiz-ended');
-                    socket.off('final-leaderboard');
-                    socket.off('score-update');
-                    if (countdownRef.current) clearInterval(countdownRef.current);
-                };
+        // --- Review Phase events ---
+        socket.on('review-phase', (data) => {
+            setReviewPhase(true);
+            // Always set a new object to force re-render, even if data is the same
+            setReviewData(prev => ({ ...data, _nonce: Math.random() }));
+        });
+        socket.on('review-ended', () => {
+            setReviewPhase(false);
+            setReviewData(null);
+        });
+
+        return () => {
+            socket.off('new-question');
+            socket.off('team-selected');
+            socket.off('countdown');
+            socket.off('quiz-ended');
+            socket.off('final-leaderboard');
+            socket.off('score-update');
+            socket.off('review-phase');
+            socket.off('review-ended');
+            if (countdownRef.current) clearInterval(countdownRef.current);
+        };
     }, [sessionId]);
 
     const handleStartNextQuestion = () => {
         socket.emit('next-question', { sessionId });
+    };
+
+    // Host ends the review phase
+    const handleEndReview = () => {
+        socket.emit('end-review', { sessionId });
     };
 
 
@@ -102,7 +132,6 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         const suffixText = suffix[(v - 20) % 10] || suffix[v] || suffix[0];
         return `${rank}${suffixText}`;
     };
-
     if (showCategoryTitle) {
         return (
             <div style={{
@@ -135,60 +164,47 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     if (quizEnded) {
         return (
             <div>
-            <h2>🏁 Quiz Ended</h2>
-            {leaderboard.length > 0 && (
-                <>
-                <h3>🏆 Final Leaderboard</h3>
-                <ol style={{ listStyleType: 'none', paddingLeft: 0 }}>
-                {leaderboard.map((entry, index) => (
-                    <li key={`${entry.teamName}-${index}`}>
-                    {formatRank(index + 1)} {entry.teamName} with {entry.score} point{entry.score !== 1 ? 's' : ''}
-                    </li>
-                ))}
-                </ol>
-                </>
-            )}
-            <button onClick={onQuizEnd}>🔙 Back to Dashboard</button>
+                <h2>3c1 Quiz Ended</h2>
+                <Leaderboard leaderboard={leaderboard} formatRank={formatRank} />
+                <button onClick={onQuizEnd}>519 Back to Dashboard</button>
             </div>
+        );
+    }
+
+    // --- Review Phase UI ---
+    if (reviewPhase && reviewData && reviewData.reviewQuestion) {
+        const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
+        const handleNext = () => socket.emit('next-review-question', { sessionId });
+        return (
+            <HostStepReview
+                reviewQuestion={reviewQuestion}
+                reviewIndex={reviewIndex}
+                reviewTotal={reviewTotal}
+                onNext={handleNext}
+                onEnd={handleEndReview}
+            />
         );
     }
 
     return (
         <div>
-        {currentQuestion ? (
-            <>
-            <h3>Current Question</h3>
-            <p><strong>{currentQuestion.text}</strong></p>
-
-            <h4>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</h4>
-
-            <button onClick={handleStartTimer} disabled={countdown > 0}>
-            {countdown > 0 ? `Next question in ${countdown}s` : 'Start Timer (Force Next)'}
-            </button>
-            </>
-        ) : (
-            <div>
-            <h3>Waiting for next question...</h3>
-            <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
-            {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
-            </button>
-            <p>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</p>
-            </div>
-        )}
-
-        {leaderboard.length > 0 && (
-            <div style={{ marginTop: '1.5rem' }}>
-            <h4>📊 Live Leaderboard</h4>
-            <ol style={{ listStyleType: 'none', paddingLeft: 0 }}>
-            {leaderboard.map((entry, index) => (
-                <li key={`${entry.teamName}-${index}`}>
-                {formatRank(index + 1)} {entry.teamName} with {entry.score} point{entry.score !== 1 ? 's' : ''}
-                </li>
-            ))}
-            </ol>
-            </div>
-        )}
-        </div>
+            {currentQuestion ? (
+                <>
+                    <QuestionDisplay question={currentQuestion} />
+                    <h4>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</h4>
+                    <Timer countdown={countdown} onStart={handleStartTimer} />
+                </>
+            ) : (
+                <div>
+                    <h3>Waiting for next question...</h3>
+                    <button onClick={handleStartNextQuestion} disabled={countdown > 0}>
+                        {countdown > 0 ? `Next question in ${countdown}s` : 'Next Question'}
+                    </button>
+                    <p>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</p>
+                </div>
+            )}
+            <Leaderboard leaderboard={leaderboard} formatRank={formatRank} />
+    </div>
     );
 }
 

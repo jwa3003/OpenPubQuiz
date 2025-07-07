@@ -1,7 +1,13 @@
 
+
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
 import DoubleCategorySelector from './DoubleCategorySelector.jsx';
+import QuestionDisplay from '../common/QuestionDisplay';
+import PlayerReviewSummary from './PlayerReviewSummary';
+import PlayerStepReview from './PlayerStepReview';
+import Timer from '../common/Timer';
+import AnswerList from '../common/AnswerList';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
@@ -33,6 +39,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const countdownRef = useRef(null);
   const countdownRunningRef = useRef(false);
   const prevQuestionRef = useRef(null);
+  const answerSubmittedRef = useRef(false);
+  // Review phase state
+  const [reviewPhase, setReviewPhase] = useState(false);
+  const [reviewData, setReviewData] = useState(null);
   // Persist state to localStorage whenever it changes
   useEffect(() => {
     try {
@@ -82,10 +92,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     // Track previous question and answer
     const onNewQuestion = ({ question, answers }) => {
       console.log('[PlayQuiz] New question received:', question);
-      // Submit the answer for the previous question, if any
-      if (prevQuestionRef.current && prevQuestionRef.current.id && prevQuestionRef.current.selectedAnswerId !== undefined) {
-        submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
-      }
+      // Reset answerSubmittedRef for new question
+      answerSubmittedRef.current = false;
       setCurrentQuestion(question);
       setAnswers(answers);
       setSelectedAnswerId(null);
@@ -103,6 +111,14 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     const onCountdown = (seconds) => {
       console.log('[PlayQuiz] Countdown update from server:', seconds);
       setCountdown(seconds);
+      // When timer hits 0, auto-submit answer for current question if not already submitted
+      if (seconds === 0 && !answerSubmittedRef.current) {
+        // Use the latest selected answer at timer end
+        if (currentQuestion && selectedAnswerId !== null) {
+          submitAnswerForQuestion(currentQuestion, selectedAnswerId);
+          answerSubmittedRef.current = true;
+        }
+      }
     };
 
     const onQuizEnded = () => {
@@ -142,6 +158,12 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     socket.on('quiz-started', onQuizStarted);
     socket.on('new-question', onNewQuestion);
     socket.on('countdown', onCountdown);
+    socket.on('timer-ended', () => {
+      // Timer ended, submit answer for current question (even if countdown event missed)
+      if (!answerSubmittedRef.current && currentQuestion && selectedAnswerId !== null) {
+        submitAnswerForQuestion(currentQuestion, selectedAnswerId);
+      }
+    });
     socket.on('quiz-ended', onQuizEnded);
     socket.on('quiz-loaded', onQuizLoaded);
     socket.on('category-title', ({ categoryName }) => {
@@ -180,6 +202,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
         clearTimeout(countdownRef.current);
         countdownRef.current = null;
       }
+      socket.off('timer-ended');
     };
   }, [sessionId, quizId, currentQuestion, selectedAnswerId, quiz]);
 
@@ -187,6 +210,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const submitAnswerForQuestion = (question, answerId) => {
     if (!question) {
       console.log('[PlayQuiz] No question provided for submit, skipping.');
+      return;
+    }
+    if (answerSubmittedRef.current) {
+      console.log('[PlayQuiz] Answer already submitted for this question, skipping.');
       return;
     }
     const answerIdToSubmit = answerId !== undefined ? answerId : selectedAnswerId;
@@ -206,6 +233,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       answerId: answerIdToSubmit,
       teamId: socket.id,
     });
+    answerSubmittedRef.current = true;
   };
 
   const handleAnswer = (answerId) => {
@@ -219,6 +247,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       sessionId,
       teamId: socket.id,
     });
+    // Do NOT submit answer here; only submit when timer hits zero
   };
 
   const resetForNewQuestion = () => {
@@ -284,6 +313,35 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     );
   }
 
+  // --- Review Phase UI ---
+  if (reviewPhase && reviewData && reviewData.reviewQuestion) {
+    const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
+    return <PlayerStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} currentTeamId={socket.id} />;
+  }
+  if (reviewPhase && reviewData && reviewData.reviewSummary) {
+    return <PlayerReviewSummary reviewSummary={reviewData.reviewSummary} currentTeamId={socket.id} />;
+  }
+  // If reviewData is present but not reviewSummary, fallback to old single-question review for compatibility
+  if (reviewPhase && reviewData && reviewData.allTeamAnswers) {
+    const myAnswer = reviewData.allTeamAnswers.find(ans => ans.teamId === socket.id);
+    return (
+      <div style={{ padding: 24, background: '#232a36', color: '#fff', borderRadius: 12, maxWidth: 700, margin: '2rem auto' }}>
+        <h2>Review Phase</h2>
+        <QuestionDisplay question={{ ...currentQuestion, ...reviewData }} />
+        <h3>Correct Answer:</h3>
+        <div style={{ fontWeight: 700, color: '#4caf50', fontSize: '1.3rem', marginBottom: 12 }}>{reviewData.correctAnswerText}</div>
+        {reviewData.explanation && (
+          <div style={{ marginBottom: 16, fontStyle: 'italic', color: '#b3e5fc' }}>{reviewData.explanation}</div>
+        )}
+        <h4>Your Answer:</h4>
+        <div style={{ color: myAnswer?.answerId === reviewData.correctAnswerId ? '#4caf50' : '#f44336', fontWeight: 600, fontSize: '1.1rem' }}>
+          {myAnswer ? myAnswer.answerText : <em>No answer submitted</em>}
+        </div>
+        <p style={{ marginTop: 24, color: '#bbb' }}><em>Waiting for the host to continue...</em></p>
+      </div>
+    );
+  }
+
   if (showResults) {
     // Submit the last answer if needed
     if (prevQuestionRef.current && prevQuestionRef.current.id && prevQuestionRef.current.selectedAnswerId !== undefined) {
@@ -327,25 +385,9 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       {categoryName && (
         <h3 style={{ marginBottom: 0 }}>Category: <span style={{ color: '#2a5d9f' }}>{categoryName}</span></h3>
       )}
-      <h2 style={{ marginTop: categoryName ? 0 : undefined }}>{currentQuestion.text}</h2>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {answers.map((ans) => (
-          <li key={ans.id} style={{ marginBottom: '0.5rem' }}>
-            <button
-              onClick={() => handleAnswer(ans.id)}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: selectedAnswerId === ans.id ? 'lightgreen' : '#f0f0f0',
-                color: '#000',
-                border: '1px solid #ccc',
-                cursor: 'pointer',
-              }}
-            >
-              {ans.text || '(no text)'}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <QuestionDisplay question={currentQuestion} />
+      <AnswerList answers={answers} selectedAnswerId={selectedAnswerId} onSelect={handleAnswer} />
+      <Timer countdown={countdown} />
       <p style={{ marginTop: '1rem' }}>
         {countdown > 0
           ? `⏳ Time remaining: ${countdown} second${countdown === 1 ? '' : 's'}`
