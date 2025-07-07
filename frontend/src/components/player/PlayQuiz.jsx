@@ -387,12 +387,11 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       )}
       <QuestionDisplay question={currentQuestion} />
       <AnswerList answers={answers} selectedAnswerId={selectedAnswerId} onSelect={handleAnswer} />
-      <Timer countdown={countdown} />
-      <p style={{ marginTop: '1rem' }}>
+      <span>
         {countdown > 0
           ? `⏳ Time remaining: ${countdown} second${countdown === 1 ? '' : 's'}`
           : '🕒 Waiting for next question...'}
-      </p>
+      </span>
     </div>
   );
 }

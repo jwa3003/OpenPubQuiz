@@ -271,7 +271,14 @@ function socketHandlers() {
             const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
             const playerIds = clients.filter(id => teamNames.has(id));
             const selected = selectedTeamsMap.get(sessionId);
-            if (selected && playerIds.every(id => selected.has(id)) && playerIds.length > 0) {
+            const timerUtils = require('./timerUtils');
+            // Only start the timer if it isn't already running for this session
+            if (
+                selected &&
+                playerIds.every(id => selected.has(id)) &&
+                playerIds.length > 0 &&
+                !timerUtils.timers.has(sessionId)
+            ) {
                 console.log('[AUTO-TIMER] All teams have selected, starting timer!');
                 startCountdown(sessionId, 5, () => sendNextQuestion(sessionId));
                 selectedTeamsMap.set(sessionId, new Set());
