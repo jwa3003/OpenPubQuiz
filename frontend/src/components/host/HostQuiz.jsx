@@ -22,6 +22,8 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     const [reviewPhase, setReviewPhase] = useState(false);
     const [reviewData, setReviewData] = useState(null);
     const [reviewSummary, setReviewSummary] = useState(null);
+    const [showCurrentLeaderboard, setShowCurrentLeaderboard] = useState(false);
+    const [showResults, setShowResults] = useState(false);
     const countdownRef = useRef(null);
 
     useEffect(() => {
@@ -42,6 +44,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             setReviewPhase(false);
             setReviewData(null);
             setReviewSummary(null);
+            setShowResults(false);
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
@@ -75,8 +78,24 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             if (countdownRef.current) clearInterval(countdownRef.current);
         });
 
+
         socket.on('final-leaderboard', (scores) => {
             setLeaderboard(scores);
+            setShowCurrentLeaderboard(false);
+            setReviewPhase(false);
+            setReviewData(null);
+            setReviewSummary(null);
+            setCurrentQuestion(null);
+            setShowResults(true);
+        });
+        socket.on('current-leaderboard', (scores) => {
+            setLeaderboard(scores);
+            setShowCurrentLeaderboard(true);
+            setReviewPhase(false);
+            setReviewData(null);
+            setReviewSummary(null);
+            setCurrentQuestion(null);
+            setShowResults(true);
         });
 
         socket.on('score-update', (scores) => {
@@ -118,6 +137,12 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
     }, [sessionId]);
 
     const handleStartNextQuestion = () => {
+        console.log('[FRONTEND DEBUG] Host clicked Continue to Next Category, emitting next-question');
+        setShowCurrentLeaderboard(false);
+        setShowResults(false);
+        setReviewSummary(null);
+        setReviewPhase(false);
+        setReviewData(null);
         socket.emit('next-question', { sessionId });
     };
 
@@ -173,6 +198,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             </div>
         );
     }
+
     if (quizEnded) {
         if (leaderboard && leaderboard.length > 0) {
             return (
@@ -187,6 +213,16 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
                 <h2>Quiz Ended</h2>
                 <button onClick={onQuizEnd}>Back to Dashboard</button>
             </div>
+        );
+    }
+    // Show current leaderboard after category review
+    if (showCurrentLeaderboard && leaderboard && leaderboard.length > 0) {
+        console.log('[FRONTEND DEBUG] Showing current leaderboard, leaderboard:', leaderboard);
+        return (
+            <>
+                <Leaderboard leaderboard={leaderboard} formatRank={formatRank} />
+                <button onClick={handleStartNextQuestion} style={{ marginTop: 32 }}>Continue to Next Category</button>
+            </>
         );
     }
 
@@ -210,6 +246,16 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         return <HostReviewSummary reviewSummary={reviewSummary} onEndReview={handleEndReview} />;
     }
 
+    if (showResults && leaderboard && leaderboard.length > 0) {
+        console.log('[FRONTEND DEBUG] Showing final leaderboard, leaderboard:', leaderboard);
+        return (
+            <>
+                <FinalLeaderboard leaderboard={leaderboard} />
+                <button onClick={handleStartNextQuestion} style={{ marginTop: 32 }}>Continue to Next Category</button>
+            </>
+        );
+    }
+
     return (
         <div>
             {currentQuestion ? (
@@ -227,8 +273,7 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
                     <p>Teams answered: {teamsAnsweredCount} / {totalTeamsCount}</p>
                 </div>
             )}
-            <Leaderboard leaderboard={leaderboard} formatRank={formatRank} />
-    </div>
+        </div>
     );
 }
 

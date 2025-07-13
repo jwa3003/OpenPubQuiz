@@ -3,7 +3,8 @@
 
 const { getIO } = require('../utils/socketInstance.js');
 
-function emitLeaderboard(sessionId, scores, teamNames) {
+
+function emitLeaderboard(sessionId, scores, teamNames, isFinal = false) {
   const io = getIO();
   if (!scores) return;
 
@@ -16,8 +17,13 @@ function emitLeaderboard(sessionId, scores, teamNames) {
     .sort((a, b) => b.score - a.score);
 
   const roomId = `session-${sessionId}`;
-  io.to(roomId).emit('final-leaderboard', leaderboard);
-  console.log('🏁 Final leaderboard:', leaderboard);
+  if (isFinal) {
+    io.to(roomId).emit('final-leaderboard', leaderboard);
+    console.log('🏁 Final leaderboard:', leaderboard);
+  } else {
+    io.to(roomId).emit('current-leaderboard', leaderboard);
+    console.log('📊 Current leaderboard:', leaderboard);
+  }
 }
 
 module.exports = {

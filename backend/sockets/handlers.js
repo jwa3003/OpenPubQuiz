@@ -20,6 +20,7 @@ function sendNextQuestion(sessionId) {
     const roomId = `session-${sessionId}`;
 
 
+    console.log(`[DEBUG] sendNextQuestion called for sessionId=${sessionId}`);
     db.get('SELECT quiz_id, current_question_index FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRow) => {
         if (err || !sessionRow) {
             console.error('❌ Could not fetch quiz session:', err);
@@ -28,139 +29,242 @@ function sendNextQuestion(sessionId) {
 
         const quizId = sessionRow.quiz_id;
         let index = sessionRow.current_question_index ?? 0;
+        console.log(`[DEBUG] Current question index: ${index}`);
+        if (sendNextQuestion._skipCategoryReviewOnce) {
+            console.log(`[DEBUG] skipCategoryReviewOnce flag:`, sendNextQuestion._skipCategoryReviewOnce[sessionId]);
+        }
 
         db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id ASC', [quizId], (err, questions) => {
             // If quiz is finished (index >= questions.length), show review for all questions if enabled
             if (err || !questions || index >= questions.length) {
+                // --- END OF QUIZ: review all questions ---
                 if (REVIEW_PHASE_ENABLED && questions && questions.length > 0) {
-                    // Build review summary for all questions in this session from DB
-                    let reviewSummary = [];
-                    let pending = questions.length;
-                    questions.forEach((question, qIdx) => {
-                        db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
-                            const correct = answers && answers.find(a => a.is_correct == 1);
-                            const correctAnswerId = correct ? String(correct.id) : null;
-                            const correctAnswerText = correct ? correct.text : '';
-                            const explanation = question.explanation || '';
-                            db.all('SELECT * FROM quiz_review_answers WHERE session_id = ? AND question_id = ?', [sessionId, question.id], (err, teamAnswers) => {
-                                const teamAnswersWithCorrect = (teamAnswers || []).map(ans => ({
-                                    teamId: ans.team_id,
-                                    teamName: ans.team_name,
-                                    answerId: ans.answer_id,
-                                    answerText: ans.answer_text,
-                                    isCorrect: String(ans.answer_id) === String(correctAnswerId)
-                                }));
-                                reviewSummary[qIdx] = {
-                                    questionId: question.id,
-                                    questionText: question.text,
-                                    correctAnswerId,
-                                    correctAnswerText,
-                                    explanation,
-                                    teamAnswers: teamAnswersWithCorrect,
-                                    allAnswers: answers ? answers.map(a => ({ id: a.id, text: a.text })) : []
-                                };
-                                pending--;
-                                if (pending === 0) {
-                                    // All review data ready, start backend-driven step-by-step review
-                                    let reviewState = {
-                                        reviewIndex: 0, // which question
-                                        reviewStep: 0    // which step within question (0=show Q&A, 1=highlight correct, 2=show team results)
-                                    };
-                                    function emitCurrentReviewStep() {
-                                        if (reviewSummary.length === 0) return finishQuiz();
-                                        const { reviewIndex, reviewStep } = reviewState;
-                                        const reviewQuestion = reviewSummary[reviewIndex];
-                                        io.to(roomId).emit('review-step', {
-                                            reviewQuestion,
-                                            reviewIndex,
-                                            reviewTotal: reviewSummary.length,
-                                            reviewStep // 0=show Q&A, 1=highlight correct, 2=show team results
-                                        });
-                                    }
-                                    // Register per-socket handlers for review navigation
-                                    const registerReviewStepHandlers = (socket) => {
-                                        function handleNextReviewStep({ sessionId: stepSessionId }) {
-                                            if (stepSessionId !== sessionId) return;
-                                            reviewState.reviewStep++;
-                                            // 3 steps: 0=show Q&A, 1=highlight correct, 2=show team results
-                                            if (reviewState.reviewStep > 2) {
-                                                reviewState.reviewStep = 0;
-                                                reviewState.reviewIndex++;
-                                                if (reviewState.reviewIndex >= reviewSummary.length) {
-                                                    // End of review phase: emit review-summary to all clients
-                                                    io.to(roomId).emit('review-summary', { reviewSummary });
-                                                    // Wait for host to emit end-review before leaderboard
-                                                    socket.off('next-review-step', handleNextReviewStep);
-                                                    socket.off('end-review', handleEndReview);
-                                                    return;
-                                                }
-                                            }
-                                            emitCurrentReviewStep();
-                                        }
-                                        function handleEndReview({ sessionId: endSessionId }) {
-                                            if (endSessionId !== sessionId) return;
-                                            io.to(roomId).emit('review-ended');
-                                            db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
-                                            finishQuiz();
-                                            socket.off('next-review-step', handleNextReviewStep);
-                                            socket.off('end-review', handleEndReview);
-                                        }
-                                        socket.on('next-review-step', handleNextReviewStep);
-                                        socket.on('end-review', handleEndReview);
-                                    };
-                                    // Register handlers for all currently connected sockets in the room
-                                    const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-                                    clients.forEach(socketId => {
-                                        const socket = io.sockets.sockets.get(socketId);
-                                        if (socket) registerReviewStepHandlers(socket);
-                                    });
-                                    // Start review at step 0 of first question
-                                    emitCurrentReviewStep();
-                                }
-                            });
-                        });
+                    // Prevent further next-question after quiz end
+                    if (sendNextQuestion._quizEndedForSession && sendNextQuestion._quizEndedForSession[sessionId]) {
+                        return;
+                    }
+                    if (!sendNextQuestion._quizEndedForSession) sendNextQuestion._quizEndedForSession = {};
+                    sendNextQuestion._quizEndedForSession[sessionId] = true;
+                    // Find the first and last question indices for the last category
+                    const lastQuestion = questions[questions.length - 1];
+                    let firstIdx = questions.length - 1;
+                    while (firstIdx > 0 && questions[firstIdx - 1].category_id === lastQuestion.category_id) {
+                        firstIdx--;
+                    }
+                    let lastIdx = questions.length - 1;
+                    triggerReviewPhase(questions, firstIdx, lastIdx, sessionId, roomId, () => {
+                        emitLeaderboard(sessionId, scores.get(sessionId), teamNames, true); // FINAL leaderboard
+                        io.to(roomId).emit('quiz-ended');
                     });
                 } else {
-                    finishQuiz();
-                }
-                function finishQuiz() {
-                    emitLeaderboard(sessionId, scores.get(sessionId), teamNames);
+                    emitLeaderboard(sessionId, scores.get(sessionId), teamNames, true); // FINAL leaderboard
                     io.to(roomId).emit('quiz-ended');
                 }
                 return;
             }
+
             // --- Normal next question flow ---
-            console.log('[REVIEW DEBUG] Normal next question flow, index:', index);
-            const question = questions[index];
-            // Determine if this is the first question of a new category
-            let isFirstInCategory = true;
-            if (index > 0) {
-                const prevCategoryId = questions[index - 1].category_id;
-                if (prevCategoryId === question.category_id) {
-                    isFirstInCategory = false;
-                }
-            }
-            db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
-                console.log('[REVIEW DEBUG] Answers for question', question.id, ':', JSON.stringify(answers, null, 2));
-                db.get('SELECT name FROM categories WHERE id = ?', [question.category_id], (err, catRow) => {
-                    const categoryName = catRow ? catRow.name : '';
-                    const emitQuestion = () => {
-                        io.to(roomId).emit('new-question', { question: { ...question, categoryName }, answers });
-                        db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
-                            if (err) console.error('❌ Failed to update question index:', err);
-                        });
-                        // No longer needed: review answers are now stored in DB
-                    };
-                    if (isFirstInCategory) {
-                        io.to(roomId).emit('category-title', { categoryName });
-                        setTimeout(emitQuestion, 5000); // Show for 5 seconds
-                    } else {
-                        emitQuestion();
+            if (index < questions.length) {
+                console.log('[REVIEW DEBUG] Normal next question flow, index:', index);
+                // Detect if this is the last question in a category
+                const currentQuestion = questions[index];
+                let isLastInCategory = true;
+                if (index < questions.length - 1) {
+                    const nextCategoryId = questions[index + 1].category_id;
+                    if (nextCategoryId === currentQuestion.category_id) {
+                        isLastInCategory = false;
                     }
+                } else {
+                    // If this is the last question in the quiz, check if it's also the last in its category
+                    isLastInCategory = true;
+                }
+
+                // After the last question in a category, trigger review for that category
+                // Only trigger review after the last question in a category has been ANSWERED and about to ADVANCE
+                // So, check if the PREVIOUS question was the last in its category
+                if (!sendNextQuestion._skipCategoryReviewOnce) sendNextQuestion._skipCategoryReviewOnce = {};
+                if (REVIEW_PHASE_ENABLED && index > 0 && !sendNextQuestion._skipCategoryReviewOnce[sessionId]) {
+                    console.log(`[DEBUG] About to check for category review, index=${index}, skipCategoryReviewOnce=${sendNextQuestion._skipCategoryReviewOnce[sessionId]}`);
+                    console.log(`[REVIEW DEBUG] Checking for category review: index=${index}, sessionId=${sessionId}`);
+                    const prevQuestion = questions[index - 1];
+                    let prevIsLastInCategory = true;
+                    if (index < questions.length) {
+                        const thisCategoryId = currentQuestion.category_id;
+                        if (thisCategoryId === prevQuestion.category_id) {
+                            prevIsLastInCategory = false;
+                        }
+                    }
+                    if (prevIsLastInCategory) {
+                        console.log(`[REVIEW DEBUG] Triggering category review for previous category, sessionId=${sessionId}`);
+                        // Find the first and last question indices for the previous category
+                        let firstIdx = index - 1;
+                        while (firstIdx > 0 && questions[firstIdx - 1].category_id === prevQuestion.category_id) {
+                            firstIdx--;
+                        }
+                        let lastIdx = index - 1;
+                        console.log(`[DEBUG] Triggering triggerReviewPhase for category review, firstIdx=${firstIdx}, lastIdx=${lastIdx}`);
+                        triggerReviewPhase(questions, firstIdx, lastIdx, sessionId, roomId, () => {
+                            // After review, emit CURRENT leaderboard, then WAIT for host to continue (do NOT auto-advance)
+                            emitLeaderboard(sessionId, scores.get(sessionId), teamNames, false); // CURRENT leaderboard
+                            console.log(`[REVIEW DEBUG] Setting skipCategoryReviewOnce for sessionId=${sessionId}`);
+                            sendNextQuestion._skipCategoryReviewOnce[sessionId] = true;
+                            console.log(`[DEBUG] After category review, skipCategoryReviewOnce now:`, sendNextQuestion._skipCategoryReviewOnce[sessionId]);
+                            // DO NOT call sendNextQuestion here; wait for host to emit 'next-question'.
+                        });
+                        return;
+                    }
+                }
+
+                // Reset skip flag after skipping once, but only if we are NOT about to trigger another review
+                if (sendNextQuestion._skipCategoryReviewOnce[sessionId]) {
+                    // Only reset if we are not about to trigger another review (i.e., not at a category boundary)
+                    if (index < questions.length && (
+                        index === 0 || questions[index].category_id === questions[index - 1].category_id
+                    )) {
+                        console.log(`[REVIEW DEBUG] Skipping category review for sessionId=${sessionId} and resetting flag.`);
+                        sendNextQuestion._skipCategoryReviewOnce[sessionId] = false;
+                        console.log(`[DEBUG] skipCategoryReviewOnce flag reset for sessionId=${sessionId}`);
+                    }
+                }
+
+                // --- Emit the next question ---
+                db.all('SELECT * FROM answers WHERE question_id = ?', [currentQuestion.id], (err, answers) => {
+                    console.log('[REVIEW DEBUG] Answers for question', currentQuestion.id, ':', JSON.stringify(answers, null, 2));
+                    db.get('SELECT name FROM categories WHERE id = ?', [currentQuestion.category_id], (err, catRow) => {
+                        const categoryName = catRow ? catRow.name : '';
+                        const emitQuestion = () => {
+                            io.to(roomId).emit('new-question', { question: { ...currentQuestion, categoryName }, answers });
+                            db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
+                                if (err) console.error('❌ Failed to update question index:', err);
+                            });
+                            // No longer needed: review answers are now stored in DB
+                        };
+                        // Define isFirstInCategory: true if first question or category changed from previous
+                        const isFirstInCategory = (index === 0) || (questions[index].category_id !== questions[index - 1].category_id);
+                        if (isFirstInCategory) {
+                            io.to(roomId).emit('category-title', { categoryName });
+                            setTimeout(emitQuestion, 5000); // Show for 5 seconds
+                        } else {
+                            emitQuestion();
+                        }
+                    });
                 });
-            });
+            }
         });
     });
+// Helper to trigger review phase for a range of questions (inclusive)
+function triggerReviewPhase(questions, firstIdx, lastIdx, sessionId, roomId, onComplete) {
+    const io = getIO();
+    let reviewSummary = [];
+    let pending = lastIdx - firstIdx + 1;
+    for (let qIdx = firstIdx; qIdx <= lastIdx; qIdx++) {
+        const question = questions[qIdx];
+        db.all('SELECT * FROM answers WHERE question_id = ?', [question.id], (err, answers) => {
+            const correct = answers && answers.find(a => a.is_correct == 1);
+            const correctAnswerId = correct ? String(correct.id) : null;
+            const correctAnswerText = correct ? correct.text : '';
+            const explanation = question.explanation || '';
+            db.all('SELECT * FROM quiz_review_answers WHERE session_id = ? AND question_id = ?', [sessionId, question.id], (err, teamAnswers) => {
+                const teamAnswersWithCorrect = (teamAnswers || []).map(ans => ({
+                    teamId: ans.team_id,
+                    teamName: ans.team_name,
+                    answerId: ans.answer_id,
+                    answerText: ans.answer_text,
+                    isCorrect: String(ans.answer_id) === String(correctAnswerId)
+                }));
+                reviewSummary[qIdx - firstIdx] = {
+                    questionId: question.id,
+                    questionText: question.text,
+                    correctAnswerId,
+                    correctAnswerText,
+                    explanation,
+                    teamAnswers: teamAnswersWithCorrect,
+                    allAnswers: answers ? answers.map(a => ({ id: a.id, text: a.text })) : []
+                };
+                pending--;
+                if (pending === 0) {
+                    // All review data ready, start backend-driven step-by-step review
+                    let reviewState = {
+                        reviewIndex: 0, // which question
+                        reviewStep: 0    // which step within question (0=show Q&A, 1=highlight correct, 2=show team results)
+                    };
+                    function emitCurrentReviewStep() {
+                        if (reviewSummary.length === 0) return onComplete && onComplete();
+                        const { reviewIndex, reviewStep } = reviewState;
+                        const reviewQuestion = reviewSummary[reviewIndex];
+                        io.to(roomId).emit('review-step', {
+                            reviewQuestion,
+                            reviewIndex,
+                            reviewTotal: reviewSummary.length,
+                            reviewStep // 0=show Q&A, 1=highlight correct, 2=show team results
+                        });
+                    }
+                    // Register per-socket handlers for review navigation
+                    let reviewEnded = false;
+                    const registerReviewStepHandlers = (socket) => {
+                        function handleNextReviewStep({ sessionId: stepSessionId }) {
+                            if (stepSessionId !== sessionId || reviewEnded) return;
+                            reviewState.reviewStep++;
+                            // 3 steps: 0=show Q&A, 1=highlight correct, 2=show team results
+                            if (reviewState.reviewStep > 2) {
+                                reviewState.reviewStep = 0;
+                                reviewState.reviewIndex++;
+                                if (reviewState.reviewIndex >= reviewSummary.length) {
+                                    // End of review phase: emit leaderboard and then WAIT for host to advance
+                                    // CATEGORY END: emit current leaderboard (not final) and review-ended
+                                    const io = getIO();
+                                    const sessionScores = scores.get(sessionId);
+                                    if (sessionScores) {
+                                        const leaderboard = Array.from(sessionScores.entries())
+                                            .map(([teamId, score]) => ({
+                                                teamId,
+                                                teamName: teamNames.get(teamId) || 'Unknown',
+                                                score,
+                                            }))
+                                            .sort((a, b) => b.score - a.score);
+                                        io.to(roomId).emit('current-leaderboard', leaderboard);
+                                    }
+                                    io.to(roomId).emit('review-ended');
+                                    db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
+                                    reviewEnded = true;
+                                    // Set skipCategoryReviewOnce flag and call onComplete so next-question advances
+                                    if (!sendNextQuestion._skipCategoryReviewOnce) sendNextQuestion._skipCategoryReviewOnce = {};
+                                    sendNextQuestion._skipCategoryReviewOnce[sessionId] = true;
+                                    if (onComplete) onComplete();
+                                    socket.off('next-review-step', handleNextReviewStep);
+                                    socket.off('end-review', handleEndReview);
+                                    return;
+                                }
+                            }
+                            emitCurrentReviewStep();
+                        }
+                        function handleEndReview({ sessionId: endSessionId }) {
+                            if (endSessionId !== sessionId || reviewEnded) return;
+                            const { emitLeaderboard } = require('./leaderboardUtils');
+                            emitLeaderboard(sessionId, scores.get(sessionId), teamNames);
+                            io.to(roomId).emit('review-ended');
+                            db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
+                            reviewEnded = true;
+                            // DO NOT call onComplete here! Wait for explicit next-question event from host
+                            socket.off('next-review-step', handleNextReviewStep);
+                            socket.off('end-review', handleEndReview);
+                        }
+                        socket.on('next-review-step', handleNextReviewStep);
+                        socket.on('end-review', handleEndReview);
+                    };
+                    // Register handlers for all currently connected sockets in the room
+                    const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+                    clients.forEach(socketId => {
+                        const socket = io.sockets.sockets.get(socketId);
+                        if (socket) registerReviewStepHandlers(socket);
+                    });
+                    // Start review at step 0 of first question
+                    emitCurrentReviewStep();
+                }
+            });
+        });
+    }
+}
 }
 
 function socketHandlers() {
@@ -248,6 +352,20 @@ function socketHandlers() {
         });
 
         socket.on('next-question', ({ sessionId }) => {
+            console.log(`[FRONTEND DEBUG] Received 'next-question' from host (socket ${socket.id}) for session ${sessionId}`);
+            if (!sendNextQuestion._skipCategoryReviewOnce) sendNextQuestion._skipCategoryReviewOnce = {};
+            // If we are at a category boundary (i.e., just finished a review), set the skip flag for this session
+            const sessionRoom = `session-${sessionId}`;
+            const clients = Array.from(getIO().sockets.adapter.rooms.get(sessionRoom) || []);
+            // Check if a leaderboard was just emitted (i.e., review just ended)
+            // We'll use a simple heuristic: if the leaderboard was just emitted, set the skip flag
+            if (!sendNextQuestion._skipCategoryReviewOnce[sessionId]) {
+                console.log(`[DEBUG] Setting skipCategoryReviewOnce flag to true for sessionId=${sessionId}`);
+                sendNextQuestion._skipCategoryReviewOnce[sessionId] = true;
+            } else {
+                console.log(`[DEBUG] skipCategoryReviewOnce was true for sessionId=${sessionId}, resetting to false and skipping category review logic.`);
+                sendNextQuestion._skipCategoryReviewOnce[sessionId] = false;
+            }
             sendNextQuestion(sessionId);
         });
 
