@@ -9,11 +9,11 @@ import './FinalLeaderboard.css';
  *   - leaderboard: Array of { teamId, teamName, score }
  *   - currentTeamId: (optional) highlight this team
  */
-const FinalLeaderboard = ({ leaderboard, currentTeamId }) => {
+const FinalLeaderboard = ({ leaderboard, currentTeamId, title = '🏆 Final Leaderboard' }) => {
   if (!leaderboard || leaderboard.length === 0) return null;
   return (
     <div className="final-leaderboard">
-      <h2>🏆 Final Leaderboard</h2>
+      <h2>{title}</h2>
       <ol className="final-leaderboard-list">
         {leaderboard.map((entry, idx) => (
           <li
@@ -23,7 +23,6 @@ const FinalLeaderboard = ({ leaderboard, currentTeamId }) => {
             <span className="final-leaderboard-rank">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}</span>
             <span className="final-leaderboard-team">{entry.teamName}</span>
             <span className="final-leaderboard-score">{entry.score} pt{entry.score !== 1 ? 's' : ''}</span>
-            {/* Removed (Your Team) label as requested */}
           </li>
         ))}
       </ol>

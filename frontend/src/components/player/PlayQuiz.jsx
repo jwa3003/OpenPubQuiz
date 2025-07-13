@@ -45,6 +45,27 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [reviewStep, setReviewStep] = useState(0); // Track current review step for player
   const [reviewSummary, setReviewSummary] = useState(null);
   const [finalLeaderboard, setFinalLeaderboard] = useState(null);
+  const [currentLeaderboard, setCurrentLeaderboard] = useState(null);
+  // Listen for current-leaderboard event (category end)
+  useEffect(() => {
+    const onCurrentLeaderboard = (scores) => {
+      setCurrentLeaderboard(scores);
+      setShowResults(false);
+      setReviewPhase(false);
+      setReviewData(null);
+    };
+    socket.on('current-leaderboard', onCurrentLeaderboard);
+    return () => {
+      socket.off('current-leaderboard', onCurrentLeaderboard);
+    };
+  }, []);
+
+  // Clear currentLeaderboard when a new question arrives or quiz is not started
+  useEffect(() => {
+    if (!quizStarted || currentQuestion) {
+      setCurrentLeaderboard(null);
+    }
+  }, [quizStarted, currentQuestion]);
   // Listen for host's signal to show team results (must be declared at top level, before any conditional returns)
   const [showTeamsNow, setShowTeamsNow] = useState(false);
   // Only one useEffect for this, at the top, before any returns
@@ -392,6 +413,15 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     );
   }
 
+  // Only show current leaderboard if quiz is started
+  if (quizStarted && currentLeaderboard && currentLeaderboard.length > 0) {
+    return (
+      <div>
+        <FinalLeaderboard leaderboard={currentLeaderboard} currentTeamId={socket.id} title="📊 Current Leaderboard" />
+        <p style={{ textAlign: 'center', color: '#bbb' }}><em>Waiting for the host to continue...</em></p>
+      </div>
+    );
+  }
   if (showResults) {
     // Submit the last answer if needed
     if (prevQuestionRef.current && prevQuestionRef.current.id && prevQuestionRef.current.selectedAnswerId !== undefined) {
