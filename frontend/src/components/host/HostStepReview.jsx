@@ -2,11 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import './HostStepReview.css';
 
+
 function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, onNext, onEnd, isHost = true }) {
   // reviewStep: 0 = splash, 1 = answers, 2 = teams
   const [teamRevealIndex, setTeamRevealIndex] = useState(-1);
   const [splashAnim, setSplashAnim] = useState(false);
   const [answerAnim, setAnswerAnim] = useState(false);
+  // New: control when to show correct answer
+  const [showCorrect, setShowCorrect] = useState(false);
 
   // Debug label for current step
   let debugLabel = '';
@@ -18,6 +21,7 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
     setTeamRevealIndex(-1);
     setSplashAnim(false);
     setAnswerAnim(false);
+    setShowCorrect(false); // Reset correct answer highlight on step change
     if (reviewStep === 0) {
       setSplashAnim(true);
       // Auto-advance after splash for host only
@@ -52,23 +56,23 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
     <div style={{position:'fixed',top:8,right:16,fontSize:'1rem',opacity:0.7,zIndex:2000,pointerEvents:'none'}}>{debugLabel}</div>
   );
 
-  // Splash screen like category
-  if (reviewStep === 0) {
-    return (
-      <>
-        {debugMsg}
-        {/* Only the background and label/question are animated */}
-        <div className={`review-splash${splashAnim ? ' splash-in' : ' splash-out'}`}>
-          <div className="review-splash-label">Answer Reveal</div>
-          <div className="review-splash-question">{reviewQuestion.questionText}</div>
-        </div>
-        {/* No Next button needed; auto-advance for host */}
-      </>
-    );
-  }
+  // Only show splash overlay during splash phase
+  const splashOverlay = (reviewStep === 0 && splashAnim) ? (
+    <div className={`review-splash splash-in`}>
+      <div className="review-splash-label">Answer Reveal</div>
+      <div className="review-splash-question">{reviewQuestion.questionText}</div>
+    </div>
+  ) : null;
 
-  // Show all possible answers, highlight correct
-  if (reviewStep === 1) {
+  // Auto-reveal correct answer after 1.2s (same as splash), but only for reviewStep 1
+  useEffect(() => {
+    if (reviewStep === 1) {
+      const t = setTimeout(() => setShowCorrect(true), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [reviewQuestion, reviewStep]);
+
+  if (reviewStep === 0 || reviewStep === 1) {
     return (
       <>
         {debugMsg}
@@ -79,22 +83,23 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
             {reviewQuestion.allAnswers && reviewQuestion.allAnswers.map(ans => {
               const isCorrect = String(ans.id) === String(reviewQuestion.correctAnswerId);
               return (
-              <li
-                key={ans.id}
-                className={`review-answer${isCorrect ? ' correct' : ''}${answerAnim && isCorrect ? ' reveal-anim' : ''}`}
-              >
-                {ans.text}
-                {answerAnim && isCorrect && (
-                  <span className="confetti">🎉</span>
-                )}
-              </li>
-            );
-          })}
+                <li
+                  key={ans.id}
+                  className={`review-answer${showCorrect && isCorrect ? ' correct' : ''}${showCorrect && answerAnim && isCorrect ? ' reveal-anim' : ''}`}
+                >
+                  {ans.text}
+                  {showCorrect && answerAnim && isCorrect && (
+                    <span className="confetti">🎉</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
-          {isHost && (
+          {isHost && showCorrect && (
             <button onClick={onNext} className="review-next-btn">Show Team Results</button>
           )}
         </div>
+        {splashOverlay}
       </>
     );
   }
@@ -139,7 +144,14 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
     );
   }
 
-  return null;
+  // Fallback: show debug info if reviewStep is not handled
+  return (
+    <div style={{ padding: 32, color: '#fff', background: '#b71c1c', borderRadius: 12, margin: '2rem auto', maxWidth: 700 }}>
+      <h2>Review Phase Error</h2>
+      <p>Nothing to display for reviewStep: <b>{String(reviewStep)}</b></p>
+      <pre>{JSON.stringify({ reviewQuestion, reviewIndex, reviewTotal, teamRevealIndex, splashAnim, answerAnim, showCorrect }, null, 2)}</pre>
+    </div>
+  );
 }
 
 export default HostStepReview;

@@ -9,6 +9,7 @@ function emitLeaderboard(sessionId, scores, teamNames) {
 
   const leaderboard = Array.from(scores.entries())
     .map(([teamId, score]) => ({
+      teamId, // include teamId for client-side highlighting
       teamName: teamNames.get(teamId) || 'Unknown',
       score,
     }))

@@ -3,9 +3,10 @@ import socket from '../../socket';
 import DoubleCategorySelector from './DoubleCategorySelector.jsx';
 import QuestionDisplay from '../common/QuestionDisplay';
 import PlayerReviewSummary from './PlayerReviewSummary';
-import HostStepReview from '../host/HostStepReview';
+import PlayerStepReview from './PlayerStepReview';
 import Timer from '../common/Timer';
 import AnswerList from '../common/AnswerList';
+import FinalLeaderboard from '../common/FinalLeaderboard';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
@@ -41,7 +42,9 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   // Review phase state
   const [reviewPhase, setReviewPhase] = useState(false);
   const [reviewData, setReviewData] = useState(null);
+  const [reviewStep, setReviewStep] = useState(0); // Track current review step for player
   const [reviewSummary, setReviewSummary] = useState(null);
+  const [finalLeaderboard, setFinalLeaderboard] = useState(null);
   // Listen for host's signal to show team results (must be declared at top level, before any conditional returns)
   const [showTeamsNow, setShowTeamsNow] = useState(false);
   // Only one useEffect for this, at the top, before any returns
@@ -143,7 +146,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     const onQuizEnded = () => {
       console.log('[PlayQuiz] Quiz ended');
       submitAnswerForQuestion(currentQuestion);
-      setQuizStarted(false);
+      // Do NOT setQuizStarted(false) here; let leaderboard/results show
       setCurrentQuestion(null);
       setAnswers([]);
       setSelectedAnswerId(null);
@@ -178,6 +181,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     const onReviewPhase = (data) => {
       setReviewPhase(true);
       setReviewData(prev => ({ ...data, _nonce: Math.random() }));
+      if (typeof data.reviewStep === 'number') setReviewStep(data.reviewStep);
     };
     const onReviewEnded = () => {
       setReviewPhase(false);
@@ -208,6 +212,9 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       setReviewPhase(false);
       setReviewData(null);
       setReviewSummary(data.reviewSummary);
+    });
+    socket.on('final-leaderboard', (scores) => {
+      setFinalLeaderboard(scores);
     });
 
     // Only fetch if quiz is not already set by socket event
@@ -358,9 +365,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
 
   if (reviewPhase && reviewData && reviewData.reviewQuestion) {
-    const { reviewQuestion, reviewIndex, reviewTotal, reviewStep } = reviewData;
-    // Use HostStepReview for all, but only host gets controls
-    return <HostStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} reviewStep={reviewStep} isHost={false} forceShowTeams={showTeamsNow} />;
+    const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
+    return <PlayerStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} currentTeamId={socket.id} reviewStep={reviewStep} />;
   }
   if (reviewPhase && reviewData && reviewData.reviewSummary) {
     return <PlayerReviewSummary reviewSummary={reviewData.reviewSummary} currentTeamId={socket.id} />;
@@ -392,14 +398,25 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
       prevQuestionRef.current = {};
     }
+    if (finalLeaderboard && finalLeaderboard.length > 0) {
+      return (
+        <>
+          <FinalLeaderboard leaderboard={finalLeaderboard} currentTeamId={socket.id} />
+          <button onClick={() => {
+            try { localStorage.removeItem('playQuizState'); } catch {}
+            onBack();
+          }} style={{ marginTop: 32 }}>🔙 Back</button>
+        </>
+      );
+    }
     return (
       <div>
-      <h2>🏁 Quiz Ended!</h2>
-      <p>The host will announce the winners.</p>
-      <button onClick={() => {
-        try { localStorage.removeItem('playQuizState'); } catch {}
-        onBack();
-      }}>🔙 Back</button>
+        <h2>🏁 Quiz Ended!</h2>
+        <p>The host will announce the winners.</p>
+        <button onClick={() => {
+          try { localStorage.removeItem('playQuizState'); } catch {}
+          onBack();
+        }}>🔙 Back</button>
       </div>
     );
   }

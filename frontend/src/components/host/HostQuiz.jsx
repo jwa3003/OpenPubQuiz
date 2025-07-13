@@ -6,6 +6,7 @@ import QuestionDisplay from '../common/QuestionDisplay';
 import Timer from '../common/Timer';
 import HostStepReview from './HostStepReview';
 import HostReviewSummary from './HostReviewSummary';
+import FinalLeaderboard from '../common/FinalLeaderboard';
 
 
 
@@ -173,11 +174,18 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         );
     }
     if (quizEnded) {
+        if (leaderboard && leaderboard.length > 0) {
+            return (
+                <>
+                    <FinalLeaderboard leaderboard={leaderboard} />
+                    <button onClick={onQuizEnd} style={{ marginTop: 32 }}>Back to Dashboard</button>
+                </>
+            );
+        }
         return (
             <div>
-                <h2>3c1 Quiz Ended</h2>
-                <Leaderboard leaderboard={leaderboard} formatRank={formatRank} />
-                <button onClick={onQuizEnd}>519 Back to Dashboard</button>
+                <h2>Quiz Ended</h2>
+                <button onClick={onQuizEnd}>Back to Dashboard</button>
             </div>
         );
     }

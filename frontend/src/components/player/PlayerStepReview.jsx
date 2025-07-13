@@ -1,42 +1,72 @@
 
 import React, { useState, useEffect } from 'react';
+import socket from '../../socket';
 import './PlayerStepReview.css';
 
-function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTeamId }) {
-  const [phase, setPhase] = useState('splash'); // splash, answers, teams
+
+function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTeamId, reviewStep }) {
+  // Remove phase state; use reviewStep directly
   const [teamRevealIndex, setTeamRevealIndex] = useState(-1);
   const [splashAnim, setSplashAnim] = useState(false);
   const [answerAnim, setAnswerAnim] = useState(false);
+  const [showCorrect, setShowCorrect] = useState(false);
 
+  // Reset animation and reveal state on new question or reviewStep
   useEffect(() => {
-    setPhase('splash');
     setTeamRevealIndex(-1);
-    setSplashAnim(true);
+    setSplashAnim(false);
     setAnswerAnim(false);
-    const splashTimeout = setTimeout(() => {
-      setSplashAnim(false);
-      setTimeout(() => setPhase('answers'), 400); // allow fade out
-    }, 1200);
-    return () => clearTimeout(splashTimeout);
-  }, [reviewQuestion]);
+    setShowCorrect(false);
+    if (reviewStep === 0) {
+      setSplashAnim(true);
+      const splashTimeout = setTimeout(() => setSplashAnim(false), 1200);
+      return () => clearTimeout(splashTimeout);
+    }
+    if (reviewStep === 1) {
+      setTimeout(() => setAnswerAnim(true), 100);
+      // Reveal correct answer after 1.2s
+      const t = setTimeout(() => setShowCorrect(true), 1200);
+      return () => clearTimeout(t);
+    }
+    if (reviewStep === 2) {
+      setTeamRevealIndex(0);
+    }
+  }, [reviewQuestion, reviewStep]);
 
+  // Animate team reveal in teams phase
   useEffect(() => {
-    if (phase === 'answers') {
+    if (reviewStep === 2 && teamRevealIndex < reviewQuestion.teamAnswers.length - 1) {
+      const t = setTimeout(() => setTeamRevealIndex(teamRevealIndex + 1), 900);
+      return () => clearTimeout(t);
+    }
+  }, [reviewStep, teamRevealIndex, reviewQuestion]);
+
+  // Listen for socket event from backend to reveal correct answer (host-driven)
+  useEffect(() => {
+    function onReviewStep({ reviewStep }) {
+      setShowCorrect(reviewStep >= 1);
+    }
+    socket.on('review-step', onReviewStep);
+    return () => socket.off('review-step', onReviewStep);
+  }, []);
+
+  // Animate answer and team reveal based on reviewStep
+  useEffect(() => {
+    if (reviewStep === 1) {
       setTimeout(() => setAnswerAnim(true), 100);
     }
-    if (phase === 'teams') {
-      if (teamRevealIndex < reviewQuestion.teamAnswers.length - 1) {
-        const t = setTimeout(() => setTeamRevealIndex(teamRevealIndex + 1), 900);
-        return () => clearTimeout(t);
-      }
+    if (reviewStep === 2 && teamRevealIndex < reviewQuestion.teamAnswers.length - 1) {
+      const t = setTimeout(() => setTeamRevealIndex(teamRevealIndex + 1), 900);
+      return () => clearTimeout(t);
     }
-  }, [phase, teamRevealIndex, reviewQuestion]);
+  }, [reviewStep, teamRevealIndex, reviewQuestion]);
 
   if (!reviewQuestion) return <div>No review data.</div>;
   const myAnswer = reviewQuestion.teamAnswers.find(ans => ans.teamId === currentTeamId);
 
-  // Splash screen like category
-  if (phase === 'splash') {
+
+  // Splash screen
+  if (reviewStep === 0) {
     return (
       <div className={`review-splash${splashAnim ? ' splash-in' : ' splash-out'}`}>
         <div className="review-splash-label">Answer Reveal</div>
@@ -45,8 +75,8 @@ function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTea
     );
   }
 
-  // Show all possible answers, highlight correct
-  if (phase === 'answers') {
+  // Show all possible answers, highlight correct ONLY when host advances (no button for player)
+  if (reviewStep === 1) {
     return (
       <div className="review-answers">
         <h2>Question</h2>
@@ -57,23 +87,24 @@ function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTea
             return (
               <li
                 key={ans.id}
-                className={`review-answer${isCorrect ? ' correct' : ''}${answerAnim && isCorrect ? ' reveal-anim' : ''}`}
+                className={`review-answer${showCorrect && isCorrect ? ' correct' : ''}${showCorrect && answerAnim && isCorrect ? ' reveal-anim' : ''}`}
               >
                 {ans.text}
-                {answerAnim && isCorrect && (
+                {showCorrect && answerAnim && isCorrect && (
                   <span className="confetti">🎉</span>
                 )}
               </li>
             );
           })}
         </ul>
-        <button onClick={() => { setPhase('teams'); setTeamRevealIndex(0); }} className="review-next-btn">Show Team Results</button>
+        {/* No button for player; host controls reveal and phase */}
       </div>
     );
   }
 
   // Animated team reveal
-  if (phase === 'teams') {
+  if (reviewStep === 2) {
+    const myAnswer = reviewQuestion.teamAnswers.find(ans => ans.teamId === currentTeamId);
     return (
       <div className="review-teams">
         <h2>Team Results</h2>
