@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './HostStepReview.css';
 
 
-function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, onNext, onEnd, isHost = true }) {
+function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, onNext, onEnd }) {
   // reviewStep: 0 = splash, 1 = answers, 2 = teams
   const [teamRevealIndex, setTeamRevealIndex] = useState(-1);
   const [splashAnim, setSplashAnim] = useState(false);
@@ -24,10 +24,10 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
     setShowCorrect(false); // Reset correct answer highlight on step change
     if (reviewStep === 0) {
       setSplashAnim(true);
-      // Auto-advance after splash for host only
+      // Auto-advance after splash
       const splashTimeout = setTimeout(() => {
         setSplashAnim(false);
-        if (isHost && typeof onNext === 'function') {
+        if (typeof onNext === 'function') {
           onNext();
         }
       }, 1200);
@@ -39,7 +39,7 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
     if (reviewStep === 2) {
       setTeamRevealIndex(0);
     }
-  }, [reviewQuestion, reviewStep, isHost, onNext]);
+  }, [reviewQuestion, reviewStep, onNext]);
 
   useEffect(() => {
     if (reviewStep === 2 && teamRevealIndex < reviewQuestion.teamAnswers.length - 1) {
@@ -95,7 +95,7 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
               );
             })}
           </ul>
-          {isHost && showCorrect && (
+          {showCorrect && (
             <button onClick={onNext} className="review-next-btn">Show Team Results</button>
           )}
         </div>
@@ -126,19 +126,17 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
               </li>
             ))}
           </ul>
-          {isHost ? (
-            <div className="review-teams-btns">
-              {teamRevealIndex < reviewQuestion.teamAnswers.length - 1 ? (
-                <button onClick={() => setTeamRevealIndex(teamRevealIndex + 1)} className="review-next-btn">Reveal Next Team</button>
+          <div className="review-teams-btns">
+            {teamRevealIndex < reviewQuestion.teamAnswers.length - 1 ? (
+              <button onClick={() => setTeamRevealIndex(teamRevealIndex + 1)} className="review-next-btn">Reveal Next Team</button>
+            ) : (
+              reviewIndex < reviewTotal - 1 ? (
+                <button onClick={onNext} className="review-next-btn">Next</button>
               ) : (
-                reviewIndex < reviewTotal - 1 ? (
-                  <button onClick={onNext} className="review-next-btn">Next</button>
-                ) : (
-                  <button onClick={onEnd} className="review-end-btn">End Review / Show Leaderboard</button>
-                )
-              )}
-            </div>
-          ) : null}
+                <button onClick={onEnd} className="review-end-btn">End Review / Show Leaderboard</button>
+              )
+            )}
+          </div>
         </div>
       </>
     );

@@ -17,6 +17,8 @@ const sessionRoutes = require('./routes/session.js');
 const categoryRoutes = require('./routes/category.js');
 const fullQuizRoutes = require('./routes/fullQuiz.js');
 
+const multer = require('multer');
+const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -32,8 +34,34 @@ setIO(io);
 // Register socket event handlers WITHOUT passing io, since handlers will get it internally
 socketHandlers();
 
+
+// Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use(cors());
 app.use(express.json());
+
+// Multer setup for image uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
+  }
+});
+const upload = multer({ storage });
+
+// Image upload endpoint
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  // Return the public URL to the uploaded file
+  const fileUrl = `/uploads/${req.file.filename}`;
+  res.json({ url: fileUrl });
+});
 
 app.use('/api/quiz', quizRoutes);
 app.use('/api/questions', questionRoutes);

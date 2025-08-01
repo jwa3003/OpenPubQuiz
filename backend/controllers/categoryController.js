@@ -10,18 +10,18 @@ function getCategoriesByQuiz(req, res) {
 }
 
 function createCategory(req, res) {
-  const { quiz_id, name } = req.body;
+  const { quiz_id, name, image_url } = req.body;
   console.log('createCategory called with:', req.body);
   if (!quiz_id || !name) {
     console.error('Missing quiz_id or category name');
     return res.status(400).json({ error: 'Missing quiz_id or category name' });
   }
-  db.run('INSERT INTO categories (quiz_id, name) VALUES (?, ?)', [quiz_id, name], function (err) {
+  db.run('INSERT INTO categories (quiz_id, name, image_url) VALUES (?, ?, ?)', [quiz_id, name, image_url || null], function (err) {
     if (err) {
       console.error('DB error in createCategory:', err.message);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
-    res.json({ success: true, id: this.lastID, quiz_id, name });
+    res.json({ success: true, id: this.lastID, quiz_id, name, image_url });
   });
 }
 
@@ -34,9 +34,9 @@ function deleteCategory(req, res) {
 
 function updateCategory(req, res) {
   const { id } = req.params;
-  const { name } = req.body;
+  const { name, image_url } = req.body;
   if (!name) return res.status(400).json({ error: 'Missing category name' });
-  db.run('UPDATE categories SET name = ? WHERE id = ?', [name, id], function (err) {
+  db.run('UPDATE categories SET name = ?, image_url = ? WHERE id = ?', [name, image_url || null, id], function (err) {
     if (err) {
       console.error('❌ Error updating category:', err.message);
       return res.status(500).json({ error: 'Database error' });

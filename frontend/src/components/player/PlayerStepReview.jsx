@@ -70,6 +70,9 @@ function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTea
     return (
       <div className={`review-splash${splashAnim ? ' splash-in' : ' splash-out'}`}>
         <div className="review-splash-label">Answer Reveal</div>
+        {reviewQuestion.categoryImageUrl && (
+          <img src={reviewQuestion.categoryImageUrl} alt="Category" style={{ maxWidth: 180, maxHeight: 120, margin: '0.5rem auto', display: 'block', borderRadius: 8, border: '2px solid #fff', boxShadow: '0 2px 8px #0002' }} />
+        )}
         <div className="review-splash-question">{reviewQuestion.questionText}</div>
       </div>
     );

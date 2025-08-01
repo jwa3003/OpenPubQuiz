@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import socket from '../../socket';
 
+
 import Leaderboard from '../common/Leaderboard';
 import QuestionDisplay from '../common/QuestionDisplay';
 import Timer from '../common/Timer';
@@ -10,11 +11,10 @@ import FinalLeaderboard from '../common/FinalLeaderboard';
 
 
 
-function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
+function HostQuiz({ sessionId, players, onQuizEnd }) {
     const [showCategoryTitle, setShowCategoryTitle] = useState(false);
     const [categoryTitle, setCategoryTitle] = useState('');
     const [currentQuestion, setCurrentQuestion] = useState(null);
-    const [answers, setAnswers] = useState([]);
     const [selectedTeams, setSelectedTeams] = useState(new Set());
     const [countdown, setCountdown] = useState(0);
     const [quizEnded, setQuizEnded] = useState(false);
@@ -35,9 +35,8 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
             setTimeout(() => setShowCategoryTitle(false), 5000);
         });
 
-        socket.on('new-question', ({ question, answers }) => {
+        socket.on('new-question', ({ question }) => {
             setCurrentQuestion(question);
-            setAnswers(answers);
             setSelectedTeams(new Set());
             setQuizEnded(false);
             setCountdown(0);
@@ -70,7 +69,6 @@ function HostQuiz({ sessionId, quizId, players, onQuizEnd }) {
         socket.on('quiz-ended', () => {
             setQuizEnded(true);
             setCurrentQuestion(null);
-            setAnswers([]);
             setCountdown(0);
             setReviewPhase(false);
             setReviewData(null);

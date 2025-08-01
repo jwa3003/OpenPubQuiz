@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     quiz_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    image_url TEXT,
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
 );
 

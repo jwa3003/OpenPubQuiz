@@ -9,17 +9,17 @@ function getAnswersByQuestion(req, res) {
 }
 
 function createAnswer(req, res) {
-  const { question_id, text, is_correct = 0 } = req.body;
+  const { question_id, text, is_correct = 0, image_url } = req.body;
   if (!question_id || !text) return res.status(400).json({ error: 'Missing fields' });
 
-  db.run('INSERT INTO answers (question_id, text, is_correct) VALUES (?, ?, ?)', [question_id, text, is_correct ? 1 : 0], function (err) {
+  db.run('INSERT INTO answers (question_id, text, is_correct, image_url) VALUES (?, ?, ?, ?)', [question_id, text, is_correct ? 1 : 0, image_url || null], function (err) {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json({ success: true, id: this.lastID });
   });
 }
 
 function updateAnswer(req, res) {
-  const { text, is_correct } = req.body;
+  const { text, is_correct, image_url } = req.body;
   const fields = [];
   const values = [];
 
@@ -31,6 +31,11 @@ function updateAnswer(req, res) {
   if (is_correct !== undefined) {
     fields.push('is_correct = ?');
     values.push(is_correct ? 1 : 0);
+  }
+
+  if (image_url !== undefined) {
+    fields.push('image_url = ?');
+    values.push(image_url);
   }
 
   values.push(req.params.id);

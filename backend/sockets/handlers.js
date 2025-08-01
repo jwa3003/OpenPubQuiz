@@ -130,8 +130,9 @@ function sendNextQuestion(sessionId) {
                 // --- Emit the next question ---
                 db.all('SELECT * FROM answers WHERE question_id = ?', [currentQuestion.id], (err, answers) => {
                     console.log('[REVIEW DEBUG] Answers for question', currentQuestion.id, ':', JSON.stringify(answers, null, 2));
-                    db.get('SELECT name FROM categories WHERE id = ?', [currentQuestion.category_id], (err, catRow) => {
+                    db.get('SELECT name, image_url FROM categories WHERE id = ?', [currentQuestion.category_id], (err, catRow) => {
                         const categoryName = catRow ? catRow.name : '';
+                        const categoryImageUrl = catRow ? catRow.image_url : null;
                         const emitQuestion = () => {
                             io.to(roomId).emit('new-question', { question: { ...currentQuestion, categoryName }, answers });
                             db.run('UPDATE quiz_sessions SET current_question_index = ? WHERE session_id = ?', [index + 1, sessionId], (err) => {
@@ -142,7 +143,7 @@ function sendNextQuestion(sessionId) {
                         // Define isFirstInCategory: true if first question or category changed from previous
                         const isFirstInCategory = (index === 0) || (questions[index].category_id !== questions[index - 1].category_id);
                         if (isFirstInCategory) {
-                            io.to(roomId).emit('category-title', { categoryName });
+                            io.to(roomId).emit('category-title', { categoryName, categoryImageUrl });
                             setTimeout(emitQuestion, 5000); // Show for 5 seconds
                         } else {
                             emitQuestion();
@@ -241,7 +242,7 @@ function triggerReviewPhase(questions, firstIdx, lastIdx, sessionId, roomId, onC
                         function handleEndReview({ sessionId: endSessionId }) {
                             if (endSessionId !== sessionId || reviewEnded) return;
                             const { emitLeaderboard } = require('./leaderboardUtils');
-                            emitLeaderboard(sessionId, scores.get(sessionId), teamNames);
+                            emitLeaderboard(sessionId, scores.get(sessionId), teamNames, true); // FINAL leaderboard
                             io.to(roomId).emit('review-ended');
                             db.run('DELETE FROM quiz_review_answers WHERE session_id = ?', [sessionId]);
                             reviewEnded = true;

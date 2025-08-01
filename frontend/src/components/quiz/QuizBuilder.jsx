@@ -9,22 +9,52 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         initialQuizData?.categories
             ? initialQuizData.categories.map(cat => ({
                 name: cat.name,
+                image_url: cat.image_url || '',
                 questions: (cat.questions || []).map(q => ({
                     text: q.text,
-                    answers: (q.answers || []).map(a => ({ text: a.text, is_correct: !!a.is_correct }))
+                    image_url: q.image_url || '',
+                    answers: (q.answers || []).map(a => ({ text: a.text, is_correct: !!a.is_correct, image_url: a.image_url || '' }))
                 }))
             }))
             : []
     );
 
     const addCategory = () => {
-        setCategories([...categories, { name: '', questions: [] }]);
+        setCategories([...categories, { name: '', image_url: '', questions: [] }]);
     };
 
     const updateCategoryName = (index, name) => {
         const newCategories = [...categories];
         newCategories[index].name = name;
         setCategories(newCategories);
+    };
+
+    const updateCategoryImage = (index, url) => {
+        const newCategories = [...categories];
+        newCategories[index].image_url = url;
+        setCategories(newCategories);
+    };
+
+    // Upload handler for category image
+    const handleCategoryImageUpload = async (e, cIndex) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch(`${API_BASE}/api/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.url) {
+                updateCategoryImage(cIndex, data.url);
+            } else {
+                alert('Upload failed');
+            }
+        } catch (err) {
+            alert('Upload failed: ' + err.message);
+        }
     };
 
     const removeCategory = (index) => {
@@ -35,7 +65,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
 
     const addQuestion = (catIndex) => {
         const newCategories = [...categories];
-        newCategories[catIndex].questions.push({ text: '', answers: [{ text: '', is_correct: false }] });
+        newCategories[catIndex].questions.push({ text: '', image_url: '', answers: [{ text: '', is_correct: false }] });
         setCategories(newCategories);
     };
 
@@ -43,6 +73,34 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         const newCategories = [...categories];
         newCategories[catIndex].questions[qIndex].text = text;
         setCategories(newCategories);
+    };
+
+    const updateQuestionImage = (catIndex, qIndex, url) => {
+        const newCategories = [...categories];
+        newCategories[catIndex].questions[qIndex].image_url = url;
+        setCategories(newCategories);
+    };
+
+    // Upload handler for question image
+    const handleQuestionImageUpload = async (e, cIndex, qIndex) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch(`${API_BASE}/api/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.url) {
+                updateQuestionImage(cIndex, qIndex, data.url);
+            } else {
+                alert('Upload failed');
+            }
+        } catch (err) {
+            alert('Upload failed: ' + err.message);
+        }
     };
 
     const updateQuestionCategory = (qIndex, catIndex) => {
@@ -53,7 +111,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
 
     const addAnswer = (catIndex, qIndex) => {
         const newCategories = [...categories];
-        newCategories[catIndex].questions[qIndex].answers.push({ text: '', is_correct: false });
+        newCategories[catIndex].questions[qIndex].answers.push({ text: '', is_correct: false, image_url: '' });
         setCategories(newCategories);
     };
 
@@ -63,6 +121,33 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         setCategories(newCategories);
     };
 
+    const updateAnswerImage = (catIndex, qIndex, aIndex, url) => {
+        const newCategories = [...categories];
+        newCategories[catIndex].questions[qIndex].answers[aIndex].image_url = url;
+        setCategories(newCategories);
+    };
+
+    // Upload handler for answer image
+    const handleAnswerImageUpload = async (e, cIndex, qIndex, aIndex) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch(`${API_BASE}/api/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.url) {
+                updateAnswerImage(cIndex, qIndex, aIndex, data.url);
+            } else {
+                alert('Upload failed');
+            }
+        } catch (err) {
+            alert('Upload failed: ' + err.message);
+        }
+    };
     const toggleCorrect = (catIndex, qIndex, aIndex) => {
         const newCategories = [...categories];
         const ans = newCategories[catIndex].questions[qIndex].answers[aIndex];
@@ -139,7 +224,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                     const catRes = await fetch(`${API_BASE}/api/categories/${initialQuizData.categories[cIndex].id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: cat.name }),
+                        body: JSON.stringify({ name: cat.name, image_url: cat.image_url }),
                     });
                     if (!catRes.ok) throw new Error('Failed to update category');
                     categoryId = initialQuizData.categories[cIndex].id;
@@ -148,7 +233,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                     const catRes = await fetch(`${API_BASE}/api/categories`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quiz_id: quizId, name: cat.name }),
+                        body: JSON.stringify({ quiz_id: quizId, name: cat.name, image_url: cat.image_url }),
                     });
                     if (!catRes.ok) throw new Error('Failed to create category');
                     const catData = await catRes.json();
@@ -169,7 +254,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         const questionRes = await fetch(`${API_BASE}/api/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: q.text }),
+                            body: JSON.stringify({ text: q.text, image_url: q.image_url }),
                         });
                         if (!questionRes.ok) throw new Error('Failed to update question');
                         questionId = initialQuizData.categories[cIndex].questions[qIndex].id;
@@ -178,7 +263,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         const questionRes = await fetch(`${API_BASE}/api/questions`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ quiz_id: quizId, text: q.text, category_id: categoryId }),
+                            body: JSON.stringify({ quiz_id: quizId, text: q.text, category_id: categoryId, image_url: q.image_url }),
                         });
                         if (!questionRes.ok) throw new Error('Failed to create question');
                         const questionData = await questionRes.json();
@@ -194,7 +279,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                             const answerRes = await fetch(`${API_BASE}/api/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: a.text, is_correct: a.is_correct }),
+                                body: JSON.stringify({ text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
                             });
                             if (!answerRes.ok) throw new Error('Failed to update answer');
                         } else {
@@ -202,7 +287,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                             const answerRes = await fetch(`${API_BASE}/api/answers`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct }),
+                                body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
                             });
                             if (!answerRes.ok) throw new Error('Failed to create answer');
                         }
@@ -242,6 +327,22 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         placeholder="Category name"
                         style={{ flexGrow: 1 }}
                     />
+                    <input
+                        type="text"
+                        value={cat.image_url}
+                        onChange={e => updateCategoryImage(cIndex, e.target.value)}
+                        placeholder="Image URL (optional)"
+                        style={{ marginLeft: '0.5rem', width: '30%' }}
+                    />
+                    <input
+                        type="file"
+                        accept="image/*"
+                        style={{ marginLeft: '0.5rem' }}
+                        onChange={e => handleCategoryImageUpload(e, cIndex)}
+                    />
+                    {cat.image_url && (
+                        <img src={cat.image_url} alt="Category" style={{ marginLeft: 8, width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
+                    )}
                     <button
                         onClick={() => removeCategory(cIndex)}
                         style={{ marginLeft: '0.5rem', color: 'red' }}
@@ -262,6 +363,22 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                                     style={{ width: '60%' }}
                                 />
                             </label>
+                            <input
+                                type="text"
+                                value={q.image_url}
+                                onChange={e => updateQuestionImage(cIndex, qIndex, e.target.value)}
+                                placeholder="Question Image URL (optional)"
+                                style={{ marginLeft: '0.5rem', width: '30%' }}
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                style={{ marginLeft: '0.5rem' }}
+                                onChange={e => handleQuestionImageUpload(e, cIndex, qIndex)}
+                            />
+                            {q.image_url && (
+                                <img src={q.image_url} alt="Question" style={{ marginLeft: 8, width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
+                            )}
                             <button
                                 onClick={() => removeQuestion(cIndex, qIndex)}
                                 style={{ marginLeft: '0.5rem', color: 'red' }}
