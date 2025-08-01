@@ -173,9 +173,15 @@ function triggerReviewPhase(questions, firstIdx, lastIdx, sessionId, roomId, onC
                     answerText: ans.answer_text,
                     isCorrect: String(ans.answer_id) === String(correctAnswerId)
                 }));
+                // Ensure image_url is a full public path if present and not already absolute
+                let imageUrl = question.image_url;
+                if (imageUrl && !/^https?:\/\//.test(imageUrl) && !imageUrl.startsWith('/uploads/')) {
+                  imageUrl = '/uploads/' + imageUrl.replace(/^.*[\\\/]/, '');
+                }
                 reviewSummary[qIdx - firstIdx] = {
                     questionId: question.id,
                     questionText: question.text,
+                    image_url: imageUrl,
                     correctAnswerId,
                     correctAnswerText,
                     explanation,

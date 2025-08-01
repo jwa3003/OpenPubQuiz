@@ -1,3 +1,6 @@
+// Helper to get full image URL (match PlayQuiz/HostStepReview logic)
+const API_BASE = `http://${window.location.hostname}:3001`;
+const getImageUrl = (url) => url ? `${API_BASE}${url}` : null;
 
 import React, { useState, useEffect } from 'react';
 import socket from '../../socket';
@@ -83,6 +86,23 @@ function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTea
     return (
       <div className="review-answers">
         <h2>Question</h2>
+        {reviewQuestion.image_url && (
+          <img
+            src={getImageUrl(reviewQuestion.image_url)}
+            alt="Question"
+            style={{
+              maxWidth: '90vw',
+              width: '100%',
+              maxHeight: 240,
+              marginBottom: 24,
+              borderRadius: 18,
+              boxShadow: '0 4px 32px #000a',
+              objectFit: 'contain',
+              background: '#222',
+              padding: 8
+            }}
+          />
+        )}
         <div className="review-answers-question">{reviewQuestion.questionText}</div>
         <ul className="review-answers-list">
           {reviewQuestion.allAnswers && reviewQuestion.allAnswers.map(ans => {
@@ -111,6 +131,23 @@ function PlayerStepReview({ reviewQuestion, reviewIndex, reviewTotal, currentTea
     return (
       <div className="review-teams">
         <h2>Team Results</h2>
+        {reviewQuestion.image_url && (
+          <img
+            src={getImageUrl(reviewQuestion.image_url)}
+            alt="Question"
+            style={{
+              maxWidth: '90vw',
+              width: '100%',
+              maxHeight: 240,
+              marginBottom: 24,
+              borderRadius: 18,
+              boxShadow: '0 4px 32px #000a',
+              objectFit: 'contain',
+              background: '#222',
+              padding: 8
+            }}
+          />
+        )}
         <div className="review-answers-question">{reviewQuestion.questionText}</div>
         <ul className="review-teams-list">
           {reviewQuestion.teamAnswers.map((ans, idx) => (

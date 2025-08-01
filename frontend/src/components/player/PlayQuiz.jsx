@@ -442,89 +442,125 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
   // --- Question and Answers Display ---
   if (quizStarted && currentQuestion) {
+    // Set html/body overflowX: hidden and width: 100vw for full lock
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.overflowX = 'hidden';
+      document.body.style.overflowX = 'hidden';
+      document.documentElement.style.width = '100vw';
+      document.body.style.width = '100vw';
+    }
     return (
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #181c24 0%, #232a36 100%)', color: '#fff', padding: 24
+        width: '100%',
+        minHeight: '100vh',
+        overflowX: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #181c24 0%, #232a36 100%)',
+        position: 'relative',
       }}>
-        <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Question</div>
         <div style={{
-          fontWeight: 900,
-          fontSize: '2.1rem',
-          marginBottom: currentQuestion.image_url ? 18 : 32,
-          textShadow: '0 2px 16px #000a',
-          textAlign: 'center',
           width: '90vw',
-          maxWidth: 700,
-          wordBreak: 'break-word',
-          lineHeight: 1.15,
-          marginLeft: 'auto',
-          marginRight: 'auto',
+          maxWidth: 420,
+          boxSizing: 'border-box',
+          background: 'rgba(30,30,30,0.98)',
+          borderRadius: 16,
+          padding: '2rem 1rem',
+          margin: '0 auto',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-        }}>{currentQuestion.text}</div>
-        {currentQuestion.image_url && (
-          <img src={getImageUrl(currentQuestion.image_url)} alt="Question" style={{
+          color: '#fff',
+        }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16, width: '100%', textAlign: 'center' }}>Question</div>
+          <div style={{
+            fontWeight: 900,
+            fontSize: '2.1rem',
+            marginBottom: currentQuestion.image_url ? 18 : 32,
+            textShadow: '0 2px 16px #000a',
+            textAlign: 'center',
+            width: '100%',
             maxWidth: 420,
-            maxHeight: 340,
-            marginBottom: 32,
-            borderRadius: 24,
-            boxShadow: '0 4px 32px #000a',
-            objectFit: 'contain',
-            background: '#222',
-            padding: 12
-          }} />
-        )}
-        <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 12 }}>Answers</div>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, width: '100%', maxWidth: 600 }}>
-          {answers.map(ans => {
-            const isSelected = selectedAnswerId === ans.id;
-            return (
-              <li
-                key={ans.id}
-                onClick={() => handleAnswer(ans.id)}
-                style={{
-                  background: isSelected ? '#1976d2' : '#232a36',
-                  color: isSelected ? '#fff' : '#fff',
-                  border: isSelected ? '2px solid #90caf9' : '2px solid transparent',
-                  cursor: 'pointer',
-                  borderRadius: 16,
-                  marginBottom: 18,
-                  padding: 18,
-                  boxShadow: isSelected ? '0 4px 24px #1976d288' : '0 2px 12px #0004',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 18,
-                  transition: 'all 0.15s',
-                  outline: isSelected ? '2px solid #90caf9' : 'none',
-                }}
-                tabIndex={0}
-                aria-pressed={isSelected}
-                role="button"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') handleAnswer(ans.id);
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 500 }}>{ans.text}</div>
-                  {ans.image_url && (
-                    <img src={getImageUrl(ans.image_url)} alt="Answer" style={{
-                      maxWidth: 180,
-                      maxHeight: 120,
-                      marginTop: 10,
-                      borderRadius: 12,
-                      boxShadow: '0 2px 12px #000a',
-                      objectFit: 'contain',
-                      background: '#222',
-                      padding: 6
-                    }} />
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+            wordBreak: 'break-word',
+            lineHeight: 1.15,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>{currentQuestion.text}</div>
+          {currentQuestion.image_url && (
+            <img src={getImageUrl(currentQuestion.image_url)} alt="Question" style={{
+              maxWidth: '90vw',
+              width: '100%',
+              maxHeight: 240,
+              marginBottom: 24,
+              borderRadius: 18,
+              boxShadow: '0 4px 32px #000a',
+              objectFit: 'contain',
+              background: '#222',
+              padding: 8
+            }} />
+          )}
+          <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 12, width: '100%', textAlign: 'center' }}>Answers</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, width: '100%', maxWidth: 420 }}>
+            {answers.map(ans => {
+              const isSelected = selectedAnswerId === ans.id;
+              return (
+                <li
+                  key={ans.id}
+                  onClick={() => handleAnswer(ans.id)}
+                  style={{
+                    background: isSelected ? '#1976d2' : '#232a36',
+                    color: isSelected ? '#fff' : '#fff',
+                    border: isSelected ? '2px solid #90caf9' : '2px solid transparent',
+                    cursor: 'pointer',
+                    borderRadius: 14,
+                    marginBottom: 14,
+                    padding: 14,
+                    boxShadow: isSelected ? '0 4px 24px #1976d288' : '0 2px 12px #0004',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.15s',
+                    outline: isSelected ? '2px solid #90caf9' : 'none',
+                    width: '100%',
+                    maxWidth: 420,
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                  }}
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  role="button"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') handleAnswer(ans.id);
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 500 }}>{ans.text}</div>
+                    {ans.image_url && (
+                      <img src={getImageUrl(ans.image_url)} alt="Answer" style={{
+                        maxWidth: '80vw',
+                        width: '100%',
+                        maxHeight: 90,
+                        marginTop: 8,
+                        borderRadius: 10,
+                        boxShadow: '0 2px 12px #000a',
+                        objectFit: 'contain',
+                        background: '#222',
+                        padding: 4
+                      }} />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     );
   }

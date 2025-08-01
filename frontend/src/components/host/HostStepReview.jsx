@@ -1,3 +1,6 @@
+// Helper to get full image URL (match PlayQuiz logic)
+const API_BASE = `http://${window.location.hostname}:3001`;
+const getImageUrl = (url) => url ? `${API_BASE}${url}` : null;
 
 import React, { useState, useEffect } from 'react';
 import './HostStepReview.css';
@@ -74,10 +77,47 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
 
   if (reviewStep === 0 || reviewStep === 1) {
     return (
-      <>
+      <div style={{
+        width: '100%',
+        maxWidth: '100vw',
+        minHeight: '100vh',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#181818',
+        position: 'relative',
+      }}>
         {debugMsg}
-        <div className="review-answers">
+        <div style={{
+          width: '90vw',
+          maxWidth: 420,
+          boxSizing: 'border-box',
+          background: 'rgba(30,30,30,0.98)',
+          borderRadius: 16,
+          padding: '2rem 1rem',
+          margin: '0 auto',
+        }}>
           <h2>Question</h2>
+          {reviewQuestion.image_url && (
+            <img
+              src={getImageUrl(reviewQuestion.image_url)}
+              alt="Question"
+              style={{
+                maxWidth: '90vw',
+                width: '100%',
+                maxHeight: 240,
+                marginBottom: 24,
+                borderRadius: 18,
+                boxShadow: '0 4px 32px #000a',
+                objectFit: 'contain',
+                background: '#222',
+                padding: 8
+              }}
+            />
+          )}
           <div className="review-answers-question">{reviewQuestion.questionText}</div>
           <ul className="review-answers-list">
             {reviewQuestion.allAnswers && reviewQuestion.allAnswers.map(ans => {
@@ -100,17 +140,52 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
           )}
         </div>
         {splashOverlay}
-      </>
+      </div>
     );
   }
 
   // Animated team reveal
   if (reviewStep === 2) {
     return (
-      <>
+      <div style={{
+        width: '100vw',
+        minHeight: '100vh',
+        overflowX: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#181818',
+        position: 'relative',
+      }}>
         {debugMsg}
-        <div className="review-teams">
+        <div style={{
+          width: '90vw',
+          maxWidth: 420,
+          boxSizing: 'border-box',
+          background: 'rgba(30,30,30,0.98)',
+          borderRadius: 16,
+          padding: '2rem 1rem',
+          margin: '0 auto',
+        }}>
           <h2>Team Results</h2>
+          {reviewQuestion.image_url && (
+            <img
+              src={getImageUrl(reviewQuestion.image_url)}
+              alt="Question"
+              style={{
+                maxWidth: '90vw',
+                width: '100%',
+                maxHeight: 240,
+                marginBottom: 24,
+                borderRadius: 18,
+                boxShadow: '0 4px 32px #000a',
+                objectFit: 'contain',
+                background: '#222',
+                padding: 8
+              }}
+            />
+          )}
           <div className="review-answers-question">{reviewQuestion.questionText}</div>
           <ul className="review-teams-list">
             {reviewQuestion.teamAnswers.map((ans, idx) => (
@@ -138,7 +213,7 @@ function HostStepReview({ reviewQuestion, reviewIndex, reviewTotal, reviewStep, 
             )}
           </div>
         </div>
-      </>
+      </div>
     );
   }
 
