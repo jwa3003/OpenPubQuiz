@@ -66,6 +66,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     fetchTeams();
 
     const handleTeamJoined = (team) => {
+      console.log('[HostDashboard] teamJoined event:', team);
       if (team.role === 'host') return;
       setTeams((prev) => {
         if (!prev.find((t) => t.id === team.id)) {

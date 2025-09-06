@@ -1,6 +1,6 @@
 
 // backend/sockets/handlers.js (refactored)
-const db = require('../db/db.js');
+const db = require('../db.js');
 const { getIO } = require('../utils/socketInstance.js');
 const { startCountdown } = require('./timerUtils');
 const { emitLeaderboard } = require('./leaderboardUtils');
@@ -9,8 +9,9 @@ const { emitLeaderboard } = require('./leaderboardUtils');
 // === Feature flag for review phase ===
 const REVIEW_PHASE_ENABLED = true;
 
-const scores = new Map(); // Map<sessionId, Map<socketId, score>>
-const teamNames = new Map(); // Map<socketId, teamName>
+const scores = new Map(); // Map<sessionId, Map<teamId, score>>
+const teamNames = new Map(); // Map<teamId, teamName>
+const socketToTeamId = new Map(); // Map<socket.id, teamId>
 const selectedTeamsMap = new Map(); // Map<sessionId, Set<teamId>>
 const answeredTeams = new Map(); // Map<sessionId, Set<teamId>>
 
@@ -282,8 +283,9 @@ function socketHandlers() {
         const remoteAddr = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
         console.log(`🔌 New client connected: ${socket.id} from ${remoteAddr}`);
 
-        socket.on('joinRoom', ({ sessionId, teamName, role, quizId }) => {
-            console.log(`[SOCKET DEBUG] joinRoom called by ${socket.id} from ${remoteAddr} with sessionId=${sessionId}, teamName=${teamName}, role=${role}, quizId=${quizId}`);
+
+        socket.on('joinRoom', ({ sessionId, teamName, role, quizId, teamId }) => {
+            console.log(`[SOCKET DEBUG] joinRoom called by ${socket.id} (teamId=${teamId}) from ${remoteAddr} with sessionId=${sessionId}, teamName=${teamName}, role=${role}, quizId=${quizId}`);
             if (!sessionId) {
                 socket.emit('error', { message: 'Missing sessionId' });
                 return;
@@ -297,21 +299,22 @@ function socketHandlers() {
                 }
 
                 socket.join(roomId);
-                console.log(`✅ ${socket.id} joined ${roomId} (remote: ${remoteAddr})`);
+                console.log(`✅ ${socket.id} (teamId=${teamId}) joined ${roomId} (remote: ${remoteAddr})`);
 
                 const userName = teamName || (role === 'host' ? 'Host' : 'Team');
 
-                if (role === 'player' && teamName) {
-                    io.to(roomId).emit('teamJoined', { id: socket.id, name: userName, role });
-                    teamNames.set(socket.id, teamName);
+                if (role === 'player' && teamName && teamId) {
+                    io.to(roomId).emit('teamJoined', { id: teamId, name: userName, role });
+                    teamNames.set(teamId, teamName);
+                    socketToTeamId.set(socket.id, teamId);
 
                     db.run(
                         `INSERT OR IGNORE INTO quiz_sessions_teams (session_id, team_id, team_name) VALUES (?, ?, ?)`,
-                        [sessionId, socket.id, teamName]
+                        [sessionId, teamId, teamName]
                     );
 
                     if (!scores.has(sessionId)) scores.set(sessionId, new Map());
-                    if (!scores.get(sessionId).has(socket.id)) scores.get(sessionId).set(socket.id, 0);
+                    if (!scores.get(sessionId).has(teamId)) scores.get(sessionId).set(teamId, 0);
                 }
 
                 const activeQuizId = quizId || session.quiz_id;
@@ -431,11 +434,14 @@ function socketHandlers() {
             selectedTeamsMap.get(sessionId).add(teamId);
             io.to(roomId).emit('team-selected', { teamId });
 
+            // Use teamNames map for playerIds
             const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-            const playerIds = clients.filter(id => teamNames.has(id));
+            const playerIds = clients.filter(id => {
+                const tId = socketToTeamId.get(id);
+                return tId && teamNames.has(tId);
+            }).map(id => socketToTeamId.get(id));
             const selected = selectedTeamsMap.get(sessionId);
             const timerUtils = require('./timerUtils');
-            // Only start the timer if it isn't already running for this session
             if (
                 selected &&
                 playerIds.every(id => selected.has(id)) &&
@@ -449,8 +455,8 @@ function socketHandlers() {
         });
 
 
-        socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, teamId }) => {
 
+        socket.on('submitAnswer', ({ sessionId, quizId, questionId, answerId, teamId }) => {
             if (!sessionId || !quizId || !questionId || (answerId === undefined) || !teamId) {
                 socket.emit('error', { message: 'Missing data for submitAnswer' });
                 return;
@@ -461,7 +467,7 @@ function socketHandlers() {
 
             if (!answeredTeams.has(sessionId)) answeredTeams.set(sessionId, new Set());
             answeredTeams.get(sessionId).add(teamId);
-            console.log('[SUBMIT DEBUG] submitAnswer received:', { sessionId, teamId });
+            console.log('[SUBMIT DEBUG] submitAnswer received:', { sessionId, teamId, socketId: socket.id });
             console.log('[SUBMIT DEBUG] answeredTeams for session:', Array.from(answeredTeams.get(sessionId)));
 
             // Store answer for review phase in persistent DB table
@@ -477,7 +483,10 @@ function socketHandlers() {
             db.all('SELECT id FROM quiz_sessions WHERE session_id = ?', [sessionId], (err, sessionRows) => {
                 if (err || !sessionRows || sessionRows.length === 0) return;
                 const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-                const playerIds = clients.filter(id => teamNames.has(id));
+                const playerIds = clients.filter(id => {
+                    const tId = socketToTeamId.get(id);
+                    return tId && teamNames.has(tId);
+                }).map(id => socketToTeamId.get(id));
                 const answered = answeredTeams.get(sessionId);
                 if (REVIEW_PHASE_ENABLED && answered && playerIds.every(id => answered.has(id)) && playerIds.length > 0) {
                     // All teams have submitted, ready for review phase
@@ -495,7 +504,7 @@ function socketHandlers() {
                             points = 2;
                         }
 
-                        console.log(`✅ Correct answer from ${teamNames.get(teamId)}! (${points} point${points > 1 ? 's' : ''})`);
+                        console.log(`✅ Correct answer from ${teamNames.get(teamId)} (socket ${socket.id})! (${points} point${points > 1 ? 's' : ''})`);
 
                         if (!scores.has(sessionId)) scores.set(sessionId, new Map());
 
@@ -503,7 +512,7 @@ function socketHandlers() {
                         const prev = sessionScores.get(teamId) || 0;
                         sessionScores.set(teamId, prev + points);
 
-                        console.log(`🎯 ${teamNames.get(teamId)} now has ${prev + points} point(s)`);
+                        console.log(`🎯 ${teamNames.get(teamId)} (teamId=${teamId}) now has ${prev + points} point(s)`);
 
                         const partialLeaderboard = Array.from(sessionScores.entries())
                         .map(([id, score]) => ({
@@ -515,7 +524,7 @@ function socketHandlers() {
                         io.to(roomId).emit('score-update', partialLeaderboard);
                     });
                 } else {
-                    console.log(`❌ Incorrect answer from ${teamNames.get(teamId)}`);
+                    console.log(`❌ Incorrect answer from ${teamNames.get(teamId)} (socket ${socket.id})`);
                 }
             });
 
@@ -605,10 +614,14 @@ function socketHandlers() {
         });
 
         socket.on('disconnect', () => {
-            console.log('❌ Client disconnected:', socket.id);
-            teamNames.delete(socket.id);
-            for (const sessionScores of scores.values()) {
-                sessionScores.delete(socket.id);
+            const teamId = socketToTeamId.get(socket.id);
+            console.log(`❌ Client disconnected: ${socket.id} (teamId=${teamId})`);
+            if (teamId) {
+                teamNames.delete(teamId);
+                for (const sessionScores of scores.values()) {
+                    sessionScores.delete(teamId);
+                }
+                socketToTeamId.delete(socket.id);
             }
         });
     });

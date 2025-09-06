@@ -1,8 +1,23 @@
+
 import { useState } from 'react';
 
 const API_BASE = '/api';
 
 function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode = false }) {
+    // Mark/unmark an answer as correct
+    const toggleCorrect = (catIndex, qIndex, aIndex) => {
+        const newCategories = [...categories];
+        const ans = newCategories[catIndex].questions[qIndex].answers[aIndex];
+        ans.is_correct = !ans.is_correct;
+        setCategories(newCategories);
+    };
+
+
+    const addQuestion = (catIndex) => {
+        const newCategories = [...categories];
+        newCategories[catIndex].questions.push({ text: '', image_url: '', answers: [{ text: '', is_correct: false }] });
+        setCategories(newCategories);
+    };
     // If editing, initialize state from initialQuizData
     const [quizName, setQuizName] = useState(initialQuizData?.quiz?.name || '');
     const [categories, setCategories] = useState(
@@ -11,7 +26,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                 name: cat.name,
                 image_url: cat.image_url || '',
                 questions: (cat.questions || []).map(q => ({
-                    text: q.text,
+                    text: q.text || '',
                     image_url: q.image_url || '',
                     answers: (q.answers || []).map(a => ({ text: a.text, is_correct: !!a.is_correct, image_url: a.image_url || '' }))
                 }))
@@ -19,10 +34,20 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
             : []
     );
 
+
     const addCategory = () => {
         setCategories([...categories, { name: '', image_url: '', questions: [] }]);
     };
 
+    // Ensure updateAnswerText is always defined and in scope
+    const updateAnswerText = (catIndex, qIndex, aIndex, text) => {
+        const newCategories = [...categories];
+        newCategories[catIndex].questions[qIndex].answers[aIndex].text = text;
+        setCategories(newCategories);
+    };
+
+
+    // ...existing code...
     const updateCategoryName = (index, name) => {
         const newCategories = [...categories];
         newCategories[index].name = name;
@@ -30,8 +55,8 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
     };
 
     const updateCategoryImage = (index, url) => {
-        const newCategories = [...categories];
-        newCategories[index].image_url = url;
+    const newCategories = [...categories];
+    newCategories[index].image_url = url;
         setCategories(newCategories);
     };
 
@@ -53,20 +78,8 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                 alert('Upload failed');
             }
         } catch (err) {
-            alert('Upload failed: ' + err.message);
+            alert('Upload failed');
         }
-    };
-
-    const removeCategory = (index) => {
-        const newCategories = [...categories];
-        newCategories.splice(index, 1);
-        setCategories(newCategories);
-    };
-
-    const addQuestion = (catIndex) => {
-        const newCategories = [...categories];
-        newCategories[catIndex].questions.push({ text: '', image_url: '', answers: [{ text: '', is_correct: false }] });
-        setCategories(newCategories);
     };
 
     const updateQuestionText = (catIndex, qIndex, text) => {
@@ -115,58 +128,6 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         setCategories(newCategories);
     };
 
-    const updateAnswerText = (catIndex, qIndex, aIndex, text) => {
-        const newCategories = [...categories];
-        newCategories[catIndex].questions[qIndex].answers[aIndex].text = text;
-        setCategories(newCategories);
-    };
-
-    const updateAnswerImage = (catIndex, qIndex, aIndex, url) => {
-        const newCategories = [...categories];
-        newCategories[catIndex].questions[qIndex].answers[aIndex].image_url = url;
-        setCategories(newCategories);
-    };
-
-    // Upload handler for answer image
-    const handleAnswerImageUpload = async (e, cIndex, qIndex, aIndex) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const formData = new FormData();
-        formData.append('image', file);
-        try {
-            const res = await fetch(`${API_BASE}/upload`, {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (data.url) {
-                updateAnswerImage(cIndex, qIndex, aIndex, data.url);
-            } else {
-                alert('Upload failed');
-            }
-        } catch (err) {
-            alert('Upload failed: ' + err.message);
-        }
-    };
-    const toggleCorrect = (catIndex, qIndex, aIndex) => {
-        const newCategories = [...categories];
-        const ans = newCategories[catIndex].questions[qIndex].answers[aIndex];
-        ans.is_correct = !ans.is_correct;
-        setCategories(newCategories);
-    };
-
-    const removeAnswer = (catIndex, qIndex, aIndex) => {
-        const newCategories = [...categories];
-        newCategories[catIndex].questions[qIndex].answers.splice(aIndex, 1);
-        setCategories(newCategories);
-    };
-
-    const removeQuestion = (catIndex, qIndex) => {
-        const newCategories = [...categories];
-        newCategories[catIndex].questions.splice(qIndex, 1);
-        setCategories(newCategories);
-    };
-
     const saveQuiz = async () => {
         if (!quizName.trim()) {
             alert('Quiz name is required');
@@ -184,23 +145,13 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
             alert('Add at least one question in a category');
             return;
         }
-        for (const cat of categories) {
-            if (cat.questions && cat.questions.some(q => !q.text.trim())) {
-                alert('All questions must have text');
-                return;
-            }
+        if (categories.some(cat => cat.questions && cat.questions.some(q => !q.text.trim()))) {
+            alert('All questions must have text');
+            return;
         }
-
         try {
             let quizId;
             if (editMode && initialQuizData?.quiz?.id) {
-                // Update quiz name
-                const quizRes = await fetch(`${API_BASE}/quiz/${initialQuizData.quiz.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: quizName }),
-                });
-                if (!quizRes.ok) throw new Error('Failed to update quiz');
                 quizId = initialQuizData.quiz.id;
             } else {
                 // Create new quiz
@@ -229,7 +180,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                     if (!catRes.ok) throw new Error('Failed to update category');
                     categoryId = initialQuizData.categories[cIndex].id;
                 } else {
-                    // Create new category
+                    // Create category
                     const catRes = await fetch(`${API_BASE}/categories`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -254,7 +205,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         const questionRes = await fetch(`${API_BASE}/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: q.text, image_url: q.image_url }),
+                                body: JSON.stringify({ text: q.text, category_id: categoryId }),
                         });
                         if (!questionRes.ok) throw new Error('Failed to update question');
                         questionId = initialQuizData.categories[cIndex].questions[qIndex].id;
@@ -269,25 +220,24 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         const questionData = await questionRes.json();
                         questionId = questionData.id;
                     }
-
                     // Answers
                     for (let aIndex = 0; aIndex < q.answers.length; ++aIndex) {
                         const a = q.answers[aIndex];
-                        if (!a.text.trim()) continue;
+                        let answerRes;
                         if (editMode && initialQuizData?.categories?.[cIndex]?.questions?.[qIndex]?.answers?.[aIndex]?.id) {
                             // Update answer
-                            const answerRes = await fetch(`${API_BASE}/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
+                            answerRes = await fetch(`${API_BASE}/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
                             });
                             if (!answerRes.ok) throw new Error('Failed to update answer');
                         } else {
-                            // Create new answer
-                            const answerRes = await fetch(`${API_BASE}/answers`, {
+                            // Create answer
+                            answerRes = await fetch(`${API_BASE}/answers`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
+                                    body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct }),
                             });
                             if (!answerRes.ok) throw new Error('Failed to create answer');
                         }
