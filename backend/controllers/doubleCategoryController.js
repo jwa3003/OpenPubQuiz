@@ -14,6 +14,16 @@ function setDoubleCategory(req, res) {
     [session_id, team_id, category_id],
     function (err) {
       if (err) return res.status(500).json({ error: 'Database error', details: err.message });
+      // Emit socket event to notify all clients in the session room
+      try {
+        const { getIO } = require('../utils/socketInstance');
+        const io = getIO();
+        io.to(`session-${session_id}`).emit('double-category-updated', {
+          session_id,
+          team_id,
+          category_id
+        });
+      } catch (e) { console.error('Socket emit error:', e); }
       res.json({ success: true });
     }
   );

@@ -1,6 +1,6 @@
 // Helper to get full image URL (match PlayQuiz logic)
-const API_BASE = `http://${window.location.hostname}:3001`;
-const getImageUrl = (url) => url ? `${API_BASE}${url}` : null;
+const API_BASE = '/api';
+const getImageUrl = (url) => url ? url : null;
 
 import React, { useState, useEffect } from 'react';
 import './HostStepReview.css';

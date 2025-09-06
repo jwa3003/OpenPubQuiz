@@ -4,7 +4,7 @@ import socket from '../../socket';
 import QuizBuilder from '../quiz/QuizBuilder';
 import HostQuiz from './HostQuiz';
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = '/api';
 
 function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   const [allTeamsSelectedDouble, setAllTeamsSelectedDouble] = useState(false);
@@ -20,15 +20,14 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
   // For edit mode
   const [editingQuizData, setEditingQuizData] = useState(null);
 
-  // Poll double-category status
+  // Listen for double-category updates and update status immediately
   useEffect(() => {
     if (!sessionId || quizStarted) return;
-    const pollStatus = async () => {
+    const fetchStatus = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/double-category/status?session_id=${sessionId}`);
+        const res = await fetch(`${API_BASE}/double-category/status?session_id=${sessionId}`);
         if (!res.ok) throw new Error('Failed to fetch double-category status');
         const data = await res.json();
-        // All teams must have selected
         setAllTeamsSelectedDouble(
           data.allTeamIds && data.allTeamIds.length > 0 &&
           data.notSelectedTeamIds && data.notSelectedTeamIds.length === 0
@@ -37,9 +36,11 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
         setAllTeamsSelectedDouble(false);
       }
     };
-    pollStatus();
-    pollIntervalRef.current = setInterval(pollStatus, 2000);
-    return () => clearInterval(pollIntervalRef.current);
+    fetchStatus();
+    socket.on('double-category-updated', fetchStatus);
+    return () => {
+      socket.off('double-category-updated', fetchStatus);
+    };
   }, [sessionId, quizStarted]);
 
   useEffect(() => {
@@ -51,6 +52,18 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       role: 'host',
       quizId: localQuizId || null,
     });
+
+    // Fetch current teams from backend on mount
+    const fetchTeams = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${sessionId}/teams`);
+        if (res.ok) {
+          const data = await res.json();
+          setTeams(data.teams || []);
+        }
+      } catch {}
+    };
+    fetchTeams();
 
     const handleTeamJoined = (team) => {
       if (team.role === 'host') return;
@@ -66,18 +79,26 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       setQuizStarted(true);
     };
 
+    // Listen for quiz-loaded event to update quiz state immediately
+    const handleQuizLoaded = ({ quizId, quizName }) => {
+      setLocalQuizId(quizId);
+      setLocalQuizName(quizName);
+    };
+
     socket.on('teamJoined', handleTeamJoined);
     socket.on('quiz-started', handleQuizStarted);
+    socket.on('quiz-loaded', handleQuizLoaded);
 
     return () => {
       socket.off('teamJoined', handleTeamJoined);
       socket.off('quiz-started', handleQuizStarted);
+      socket.off('quiz-loaded', handleQuizLoaded);
     };
   }, [sessionId, localQuizId]);
 
   useEffect(() => {
     if (showQuizSelector) {
-      fetch(`${API_BASE}/api/quiz`)
+  fetch(`${API_BASE}/quiz`)
       .then((res) => res.json())
       .then((data) => setQuizzes(data))
       .catch((err) => alert('Failed to load quizzes: ' + err.message));
@@ -102,7 +123,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
       const quiz = quizzes.find((q) => q.id === selectedQuizId);
       if (!quiz) throw new Error('Selected quiz not found');
 
-      const updateRes = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+  const updateRes = await fetch(`${API_BASE}/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quiz_id: selectedQuizId }),
@@ -132,7 +153,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/quiz/${localQuizId}`, {
+  const res = await fetch(`${API_BASE}/quiz/${localQuizId}`, {
         method: 'DELETE',
       });
 
@@ -188,7 +209,7 @@ function HostDashboard({ sessionId, quizId, quizName, onBack }) {
           onClick={async () => {
             // Fetch full quiz data and open QuizBuilder in edit mode
             try {
-              const res = await fetch(`${API_BASE}/api/quiz/${localQuizId}/full`);
+              const res = await fetch(`${API_BASE}/quiz/${localQuizId}/full`);
               if (!res.ok) throw new Error('Failed to fetch quiz data');
               const data = await res.json();
               setEditingQuizData(data);

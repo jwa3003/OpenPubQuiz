@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import socket from '../../socket';
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = '/api';
 
 function RoleSelect({ onSelectRole }) {
   const [role, setRole] = useState(null);
@@ -15,7 +15,7 @@ function RoleSelect({ onSelectRole }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/sessions`, {
+  const res = await fetch(`${API_BASE}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -51,7 +51,7 @@ function RoleSelect({ onSelectRole }) {
 
     setLoading(true);
 
-    fetch(`${API_BASE}/api/sessions/${sessionId.toUpperCase()}`)
+  fetch(`${API_BASE}/sessions/${sessionId.toUpperCase()}`)
     .then((res) => {
       if (!res.ok) throw new Error('Session not found');
       return res.json();

@@ -8,5 +8,6 @@ export default defineConfig({
   server: {
     host: true,          // This allows access from any network interface
     port: 5173,          // Optional: set a fixed port (default is 5173)
+    allowedHosts: ['opq.jaitken.co.nz'],
   },
 })

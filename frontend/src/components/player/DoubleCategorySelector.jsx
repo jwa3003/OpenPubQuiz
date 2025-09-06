@@ -1,8 +1,22 @@
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 import socket from '../../socket';
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = '/api';
 
 export default function DoubleCategorySelector({ quiz, sessionId, doubleCategoryId, setDoubleCategoryId, doubleCategoryConfirmed, setDoubleCategoryConfirmed, floating }) {
+  const [socketReady, setSocketReady] = useState(socket.connected);
+
+  useEffect(() => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+    const handleConnect = () => setSocketReady(true);
+    socket.on('connect', handleConnect);
+    if (socket.connected) setSocketReady(true);
+    return () => {
+      socket.off('connect', handleConnect);
+    };
+  }, []);
   if (!quiz || !quiz.categories) return null;
   return (
     <div style={{
@@ -20,9 +34,9 @@ export default function DoubleCategorySelector({ quiz, sessionId, doubleCategory
       <h4>Select your Double-Points Category:</h4>
       <form onSubmit={async (e) => {
         e.preventDefault();
-        if (!doubleCategoryId) return;
+        if (!doubleCategoryId || !socketReady || !socket.id) return;
         try {
-          const res = await fetch(`${API_BASE}/api/double-category`, {
+          const res = await fetch(`${API_BASE}/double-category`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -48,14 +62,15 @@ export default function DoubleCategorySelector({ quiz, sessionId, doubleCategory
             <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}
         </select>
-        <button type='submit' disabled={!doubleCategoryId || doubleCategoryConfirmed} style={{ padding: '0.3rem 1rem' }}>
-          {doubleCategoryConfirmed ? 'Selected!' : 'Confirm'}
+        <button type='submit' disabled={!doubleCategoryId || doubleCategoryConfirmed || !socketReady || !socket.id} style={{ padding: '0.3rem 1rem' }}>
+          {doubleCategoryConfirmed ? 'Selected!' : (!socketReady ? 'Connecting...' : 'Confirm')}
         </button>
       </form>
       {doubleCategoryConfirmed && (
         <div style={{ color: 'green', marginTop: '0.5rem' }}>
           Double-points category selected!
         </div>
+
       )}
     </div>
   );

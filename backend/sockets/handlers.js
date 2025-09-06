@@ -278,10 +278,12 @@ function socketHandlers() {
     const io = getIO();
 
     io.on('connection', (socket) => {
-        // Step-through review phase: now handled in sendNextQuestion using DB, no in-memory state needed here
-        console.log('🔌 New client connected:', socket.id);
+        // Log remote address for debugging
+        const remoteAddr = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+        console.log(`🔌 New client connected: ${socket.id} from ${remoteAddr}`);
 
         socket.on('joinRoom', ({ sessionId, teamName, role, quizId }) => {
+            console.log(`[SOCKET DEBUG] joinRoom called by ${socket.id} from ${remoteAddr} with sessionId=${sessionId}, teamName=${teamName}, role=${role}, quizId=${quizId}`);
             if (!sessionId) {
                 socket.emit('error', { message: 'Missing sessionId' });
                 return;
@@ -295,7 +297,7 @@ function socketHandlers() {
                 }
 
                 socket.join(roomId);
-                console.log(`✅ ${socket.id} joined ${roomId}`);
+                console.log(`✅ ${socket.id} joined ${roomId} (remote: ${remoteAddr})`);
 
                 const userName = teamName || (role === 'host' ? 'Host' : 'Team');
 

@@ -35,6 +35,11 @@ setIO(io);
 socketHandlers();
 
 
+// Log every /uploads/ request
+app.use('/uploads', (req, res, next) => {
+  console.log('[UPLOADS REQUEST]', req.method, req.url, new Date());
+  next();
+});
 // Serve uploaded images statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

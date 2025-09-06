@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = '/api';
 
 function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode = false }) {
     // If editing, initialize state from initialQuizData
@@ -42,7 +42,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         const formData = new FormData();
         formData.append('image', file);
         try {
-            const res = await fetch(`${API_BASE}/api/upload`, {
+            const res = await fetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -88,7 +88,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         const formData = new FormData();
         formData.append('image', file);
         try {
-            const res = await fetch(`${API_BASE}/api/upload`, {
+            const res = await fetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -134,7 +134,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
         const formData = new FormData();
         formData.append('image', file);
         try {
-            const res = await fetch(`${API_BASE}/api/upload`, {
+            const res = await fetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -195,7 +195,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
             let quizId;
             if (editMode && initialQuizData?.quiz?.id) {
                 // Update quiz name
-                const quizRes = await fetch(`${API_BASE}/api/quiz/${initialQuizData.quiz.id}`, {
+                const quizRes = await fetch(`${API_BASE}/quiz/${initialQuizData.quiz.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: quizName }),
@@ -204,7 +204,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                 quizId = initialQuizData.quiz.id;
             } else {
                 // Create new quiz
-                const quizRes = await fetch(`${API_BASE}/api/quiz`, {
+                const quizRes = await fetch(`${API_BASE}/quiz`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: quizName }),
@@ -221,7 +221,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                 let categoryId;
                 if (editMode && initialQuizData?.categories?.[cIndex]?.id) {
                     // Update category
-                    const catRes = await fetch(`${API_BASE}/api/categories/${initialQuizData.categories[cIndex].id}`, {
+                    const catRes = await fetch(`${API_BASE}/categories/${initialQuizData.categories[cIndex].id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: cat.name, image_url: cat.image_url }),
@@ -230,7 +230,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                     categoryId = initialQuizData.categories[cIndex].id;
                 } else {
                     // Create new category
-                    const catRes = await fetch(`${API_BASE}/api/categories`, {
+                    const catRes = await fetch(`${API_BASE}/categories`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ quiz_id: quizId, name: cat.name, image_url: cat.image_url }),
@@ -251,7 +251,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                     let questionId;
                     if (editMode && initialQuizData?.categories?.[cIndex]?.questions?.[qIndex]?.id) {
                         // Update question
-                        const questionRes = await fetch(`${API_BASE}/api/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
+                        const questionRes = await fetch(`${API_BASE}/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ text: q.text, image_url: q.image_url }),
@@ -260,7 +260,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         questionId = initialQuizData.categories[cIndex].questions[qIndex].id;
                     } else {
                         // Create new question
-                        const questionRes = await fetch(`${API_BASE}/api/questions`, {
+                        const questionRes = await fetch(`${API_BASE}/questions`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ quiz_id: quizId, text: q.text, category_id: categoryId, image_url: q.image_url }),
@@ -276,7 +276,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         if (!a.text.trim()) continue;
                         if (editMode && initialQuizData?.categories?.[cIndex]?.questions?.[qIndex]?.answers?.[aIndex]?.id) {
                             // Update answer
-                            const answerRes = await fetch(`${API_BASE}/api/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
+                            const answerRes = await fetch(`${API_BASE}/answers/${initialQuizData.categories[cIndex].questions[qIndex].answers[aIndex].id}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
@@ -284,7 +284,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                             if (!answerRes.ok) throw new Error('Failed to update answer');
                         } else {
                             // Create new answer
-                            const answerRes = await fetch(`${API_BASE}/api/answers`, {
+                            const answerRes = await fetch(`${API_BASE}/answers`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct, image_url: a.image_url }),

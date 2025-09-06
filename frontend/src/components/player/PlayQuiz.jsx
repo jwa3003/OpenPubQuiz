@@ -8,7 +8,7 @@ import Timer from '../common/Timer';
 import AnswerList from '../common/AnswerList';
 import Leaderboard from '../common/Leaderboard';
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = '/api';
 
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [showCategoryTitle, setShowCategoryTitle] = useState(false);
@@ -117,8 +117,18 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     // Emit joinRoom on mount and on socket reconnect
     emitJoinRoom();
     socket.on('connect', emitJoinRoom);
+
+    // Listen for double-category-updated to update UI if needed
+    const handleDoubleCategoryUpdated = (data) => {
+      // Optionally, you could refetch quiz/session state or update UI here
+      // For now, just log for debug
+      console.log('[PlayQuiz] double-category-updated:', data);
+    };
+    socket.on('double-category-updated', handleDoubleCategoryUpdated);
+
     return () => {
       socket.off('connect', emitJoinRoom);
+      socket.off('double-category-updated', handleDoubleCategoryUpdated);
     };
   }, [sessionId, quizId, teamName]);
 
@@ -186,7 +196,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       console.log(`[PlayQuiz] Quiz loaded dynamically: ${quizName}`);
       // Always fetch full quiz data so categories are present
       setLoading(true);
-      fetch(`${API_BASE}/api/quiz/${newQuizId}/full`)
+  fetch(`${API_BASE}/quiz/${newQuizId}/full`)
         .then((res) => (res.ok ? res.json() : Promise.reject()))
         .then((quizData) => {
           console.log('[PlayQuiz] Loaded quiz data (from socket):', quizData);
@@ -246,7 +256,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     // Only fetch if quiz is not already set by socket event
     if (quizId && !quiz) {
       setLoading(true);
-      fetch(`${API_BASE}/api/quiz/${quizId}/full`)
+  fetch(`${API_BASE}/quiz/${quizId}/full`)
         .then((res) => (res.ok ? res.json() : Promise.reject()))
         .then((quizData) => {
           console.log('[PlayQuiz] Loaded quiz data:', quizData);
@@ -331,7 +341,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   };
 
   // Helper to get full image URL
-  const getImageUrl = (url) => url ? `${API_BASE}${url}` : null;
+  const getImageUrl = (url) => url ? url : null;
 
   if (showCategoryTitle) {
     console.log('[PlayQuiz] Rendering splash screen:', { categoryTitle, categoryImageUrl });
@@ -363,7 +373,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
         {categoryImageUrl && (
           <>
             {console.log('[PlayQuiz] Rendering category image:', categoryImageUrl)}
-            <img src={`${API_BASE}${categoryImageUrl}`} alt="Category" style={{
+            <img src={categoryImageUrl} alt="Category" style={{
               maxWidth: 420,
               maxHeight: 340,
               marginBottom: 18,
