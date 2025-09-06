@@ -7,7 +7,7 @@ import QuestionDisplay from '../common/QuestionDisplay';
 import Timer from '../common/Timer';
 import HostStepReview from './HostStepReview';
 import HostReviewSummary from './HostReviewSummary';
-import FinalLeaderboard from '../common/FinalLeaderboard';
+
 
 
 
@@ -201,7 +201,7 @@ function HostQuiz({ sessionId, players, onQuizEnd }) {
         if (leaderboard && leaderboard.length > 0) {
             return (
                 <>
-                    <FinalLeaderboard leaderboard={leaderboard} />
+                    <Leaderboard leaderboard={leaderboard} />
                     <button onClick={onQuizEnd} style={{ marginTop: 32 }}>Back to Dashboard</button>
                 </>
             );
@@ -248,7 +248,7 @@ function HostQuiz({ sessionId, players, onQuizEnd }) {
         console.log('[FRONTEND DEBUG] Showing final leaderboard, leaderboard:', leaderboard);
         return (
             <>
-                <FinalLeaderboard leaderboard={leaderboard} />
+                <Leaderboard leaderboard={leaderboard} />
                 <button onClick={handleStartNextQuestion} style={{ marginTop: 32 }}>Continue to Next Category</button>
             </>
         );

@@ -1,0 +1,12 @@
+# Ignore uploaded files
+backend/uploads/
+# Node modules
+node_modules/
+# Build output
+dist/
+build/
+# OS files
+.DS_Store
+Thumbs.db
+# Logs
+*.log

@@ -6,7 +6,7 @@ import PlayerReviewSummary from './PlayerReviewSummary';
 import PlayerStepReview from './PlayerStepReview';
 import Timer from '../common/Timer';
 import AnswerList from '../common/AnswerList';
-import FinalLeaderboard from '../common/FinalLeaderboard';
+import Leaderboard from '../common/Leaderboard';
 
 const API_BASE = `http://${window.location.hostname}:3001`;
 
@@ -45,7 +45,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [reviewData, setReviewData] = useState(null);
   const [reviewStep, setReviewStep] = useState(0); // Track current review step for player
   const [reviewSummary, setReviewSummary] = useState(null);
-  const [finalLeaderboard, setFinalLeaderboard] = useState(null);
+  const [leaderboard, setLeaderboard] = useState(null);
   const [currentLeaderboard, setCurrentLeaderboard] = useState(null);
   // Listen for current-leaderboard event (category end)
   useEffect(() => {
@@ -130,7 +130,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     const onQuizStarted = () => {
       console.log('[PlayQuiz] Quiz started');
       setQuizStarted(true);
-      setFinalLeaderboard(null); // Clear leaderboard on new quiz
+  setLeaderboard(null); // Clear leaderboard on new quiz
       resetForNewQuestion();
     };
 
@@ -239,7 +239,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       setReviewSummary(data.reviewSummary);
     });
     socket.on('final-leaderboard', (scores) => {
-      setFinalLeaderboard(scores);
+  setLeaderboard(scores);
       setShowResults(true);
     });
 
@@ -327,7 +327,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
 
   const resetForNewQuestion = () => {
     setSelectedAnswerId(null);
-    setFinalLeaderboard(null); // Clear leaderboard on new question
+  setLeaderboard(null); // Clear leaderboard on new question
   };
 
   // Helper to get full image URL
@@ -388,10 +388,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
       prevQuestionRef.current = {};
     }
-    if (finalLeaderboard && finalLeaderboard.length > 0) {
+    if (leaderboard && leaderboard.length > 0) {
       return (
         <>
-          <FinalLeaderboard leaderboard={finalLeaderboard} currentTeamId={socket.id} />
+          <Leaderboard leaderboard={leaderboard} currentTeamId={socket.id} />
           <button onClick={() => {
             try { localStorage.removeItem('playQuizState'); } catch {}
             onBack();
@@ -626,7 +626,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   if (quizStarted && currentLeaderboard && currentLeaderboard.length > 0) {
     return (
       <div>
-        <FinalLeaderboard leaderboard={currentLeaderboard} currentTeamId={socket.id} title="📊 Current Leaderboard" />
+  <Leaderboard leaderboard={currentLeaderboard} currentTeamId={socket.id} title="📊 Current Leaderboard" />
         <p style={{ textAlign: 'center', color: '#bbb' }}><em>Waiting for the host to continue...</em></p>
       </div>
     );
@@ -637,10 +637,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       submitAnswerForQuestion(prevQuestionRef.current, prevQuestionRef.current.selectedAnswerId);
       prevQuestionRef.current = {};
     }
-    if (finalLeaderboard && finalLeaderboard.length > 0) {
+    if (leaderboard && leaderboard.length > 0) {
       return (
         <>
-          <FinalLeaderboard leaderboard={finalLeaderboard} currentTeamId={socket.id} />
+          <Leaderboard leaderboard={leaderboard} currentTeamId={socket.id} />
           <button onClick={() => {
             try { localStorage.removeItem('playQuizState'); } catch {}
             onBack();
