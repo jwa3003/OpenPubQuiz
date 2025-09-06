@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import socket from '../../socket';
 import DoubleCategorySelector from './DoubleCategorySelector.jsx';
 import QuestionDisplay from '../common/QuestionDisplay';
@@ -11,12 +12,25 @@ import Leaderboard from '../common/Leaderboard';
 const API_BASE = '/api';
 
 function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
+  console.log('[PlayQuiz] COMPONENT MOUNTED', { sessionId, quizId, initialTeamName });
   const [showCategoryTitle, setShowCategoryTitle] = useState(false);
   const [categoryTitle, setCategoryTitle] = useState('');
   const [categoryImageUrl, setCategoryImageUrl] = useState(null);
   // Double-points category selection
   const [doubleCategoryId, setDoubleCategoryId] = useState(null);
   const [doubleCategoryConfirmed, setDoubleCategoryConfirmed] = useState(false);
+
+  // Persistent teamId logic
+  const getOrCreateTeamId = () => {
+    let id = localStorage.getItem('teamId');
+    if (!id) {
+      id = uuidv4();
+      localStorage.setItem('teamId', id);
+    }
+    return id;
+  };
+  const teamId = getOrCreateTeamId();
+
   // Try to load persisted state
   const persisted = (() => {
     try {
@@ -107,11 +121,20 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   }, [initialTeamName]);
 
   useEffect(() => {
-    if (!sessionId || !quizId || !teamName) return;
+    if (!sessionId || !teamName) return;
 
     const emitJoinRoom = () => {
-      console.log('[PlayQuiz] Joining room with teamName:', teamName);
-      socket.emit('joinRoom', { quizId, teamName, role: 'player', sessionId });
+      console.log('[PlayQuiz] EMIT joinRoom:', {
+        quizId,
+        teamName,
+        teamId,
+        role: 'player',
+        sessionId
+      });
+      if (!teamName || !teamId) {
+        console.warn('[PlayQuiz] WARNING: Missing teamName or teamId in joinRoom emit!', { teamName, teamId });
+      }
+      socket.emit('joinRoom', { quizId, teamName, teamId, role: 'player', sessionId });
     };
 
     // Emit joinRoom on mount and on socket reconnect
@@ -130,7 +153,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       socket.off('connect', emitJoinRoom);
       socket.off('double-category-updated', handleDoubleCategoryUpdated);
     };
-  }, [sessionId, quizId, teamName]);
+  }, [sessionId, teamName, quizId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -316,7 +339,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
       quizId: quizIdToUse,
       questionId: question.id,
       answerId: answerIdToSubmit,
-      teamId: socket.id,
+      teamId,
     });
     answerSubmittedRef.current = true;
   };
@@ -330,7 +353,7 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
     }
     socket.emit('answer-selected', {
       sessionId,
-      teamId: socket.id,
+      teamId,
     });
     // Do NOT submit answer here; only submit when timer hits zero
   };
@@ -424,10 +447,10 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   // --- Review Phase: PRIORITY ---
   if (reviewPhase && reviewData && reviewData.reviewQuestion) {
     const { reviewQuestion, reviewIndex, reviewTotal } = reviewData;
-    return <PlayerStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} currentTeamId={socket.id} reviewStep={reviewStep} />;
+    return <PlayerStepReview reviewQuestion={reviewQuestion} reviewIndex={reviewIndex} reviewTotal={reviewTotal} currentTeamId={teamId} reviewStep={reviewStep} />;
   }
   if (reviewPhase && reviewData && reviewData.reviewSummary) {
-    return <PlayerReviewSummary reviewSummary={reviewData.reviewSummary} currentTeamId={socket.id} />;
+    return <PlayerReviewSummary reviewSummary={reviewData.reviewSummary} currentTeamId={teamId} />;
   }
   // If reviewData is present but not reviewSummary, fallback to old single-question review for compatibility
   if (reviewPhase && reviewData && reviewData.allTeamAnswers) {
@@ -578,7 +601,8 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   // Show double-points selector as a floating option any time after quiz is loaded and before quiz starts
   const showDoubleCategorySelector = quiz.categories && quiz.categories.length > 0 && !quizStarted;
 
-  if (quiz.categories && quiz.categories.length > 0 && !quizStarted) {
+  if (quiz && quiz.categories && quiz.categories.length > 0 && !quizStarted) {
+    console.log('[PlayQuiz] Rendering DoubleCategorySelector', { quiz, quizStarted });
     return (
       <div>
         <h2>Quiz Lobby</h2>
