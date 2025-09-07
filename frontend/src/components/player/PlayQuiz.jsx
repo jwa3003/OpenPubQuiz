@@ -17,8 +17,26 @@ function PlayQuiz({ sessionId, quizId, teamName: initialTeamName, onBack }) {
   const [categoryTitle, setCategoryTitle] = useState('');
   const [categoryImageUrl, setCategoryImageUrl] = useState(null);
   // Double-points category selection
-  const [doubleCategoryId, setDoubleCategoryId] = useState(null);
-  const [doubleCategoryConfirmed, setDoubleCategoryConfirmed] = useState(false);
+  // Persisted double-points category selection
+  const persistedDouble = (() => {
+    try {
+      const data = localStorage.getItem('doubleCategoryState');
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const [doubleCategoryId, setDoubleCategoryId] = useState(persistedDouble.doubleCategoryId || null);
+  const [doubleCategoryConfirmed, setDoubleCategoryConfirmed] = useState(persistedDouble.doubleCategoryConfirmed || false);
+  // Persist doubleCategoryId and doubleCategoryConfirmed to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('doubleCategoryState', JSON.stringify({
+        doubleCategoryId,
+        doubleCategoryConfirmed
+      }));
+    } catch {}
+  }, [doubleCategoryId, doubleCategoryConfirmed]);
 
   // Persistent teamId logic
   const getOrCreateTeamId = () => {

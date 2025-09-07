@@ -31,7 +31,10 @@ setIO(io);
 socketHandlers();
 
 app.use(cors());
+
 app.use(express.json());
+// Serve uploaded images
+app.use('/uploads', express.static('uploads'));
 
 app.use('/api/quiz', quizRoutes);
 app.use('/api/quiz', fullQuizRoutes);

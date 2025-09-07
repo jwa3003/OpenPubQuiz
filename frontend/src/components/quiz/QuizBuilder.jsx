@@ -205,7 +205,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                         const questionRes = await fetch(`${API_BASE}/questions/${initialQuizData.categories[cIndex].questions[qIndex].id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: q.text, category_id: categoryId }),
+                            body: JSON.stringify({ text: q.text, category_id: categoryId, image_url: q.image_url }),
                         });
                         if (!questionRes.ok) throw new Error('Failed to update question');
                         questionId = initialQuizData.categories[cIndex].questions[qIndex].id;
@@ -237,7 +237,7 @@ function QuizBuilder({ onQuizCreated, onCancel, initialQuizData = null, editMode
                             answerRes = await fetch(`${API_BASE}/answers`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct }),
+                                body: JSON.stringify({ question_id: questionId, text: a.text, is_correct: a.is_correct, image_url: a.image_url }),
                             });
                             if (!answerRes.ok) throw new Error('Failed to create answer');
                         }

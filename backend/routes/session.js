@@ -1,9 +1,21 @@
+
 const express = require('express');
 const db = require('../db.js');
-
 const { getIO } = require('../utils/socketInstance.js'); // We'll use this to get access to `io`
-
 const router = express.Router();
+
+// Get all teams for a session
+router.get('/:session_id/teams', (req, res) => {
+    const { session_id } = req.params;
+    const sql = 'SELECT * FROM quiz_sessions_teams WHERE session_id = ?';
+    db.all(sql, [session_id], (err, rows) => {
+        if (err) {
+            console.error('❌ Failed to fetch teams for session:', err.message);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(rows);
+    });
+});
 
 // Create a new session (quiz_id is optional)
 
